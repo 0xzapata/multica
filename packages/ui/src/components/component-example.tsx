@@ -1,11 +1,9 @@
-"use client"
-
 import * as React from "react"
 
 import {
   Example,
   ExampleWrapper,
-} from "@/components/example"
+} from "@multica/ui/components/example"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,9 +15,9 @@ import {
   AlertDialogMedia,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@multica/ui/components/alert-dialog"
-import { Badge } from "@multica/ui/components/badge"
-import { Button } from "@multica/ui/components/button"
+} from "@multica/ui/components/ui/alert-dialog"
+import { Badge } from "@multica/ui/components/ui/badge"
+import { Button } from "@multica/ui/components/ui/button"
 import {
   Card,
   CardAction,
@@ -28,7 +26,7 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@multica/ui/components/card"
+} from "@multica/ui/components/ui/card"
 import {
   Combobox,
   ComboboxContent,
@@ -36,7 +34,7 @@ import {
   ComboboxInput,
   ComboboxItem,
   ComboboxList,
-} from "@multica/ui/components/combobox"
+} from "@multica/ui/components/ui/combobox"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -53,9 +51,9 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from "@multica/ui/components/dropdown-menu"
-import { Field, FieldGroup, FieldLabel } from "@multica/ui/components/field"
-import { Input } from "@multica/ui/components/input"
+} from "@multica/ui/components/ui/dropdown-menu"
+import { Field, FieldGroup, FieldLabel } from "@multica/ui/components/ui/field"
+import { Input } from "@multica/ui/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -63,8 +61,8 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@multica/ui/components/select"
-import { Textarea } from "@multica/ui/components/textarea"
+} from "@multica/ui/components/ui/select"
+import { Textarea } from "@multica/ui/components/ui/textarea"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { PlusSignIcon, BluetoothIcon, MoreVerticalCircle01Icon, FileIcon, FolderIcon, FolderOpenIcon, CodeIcon, MoreHorizontalCircle01Icon, SearchIcon, FloppyDiskIcon, DownloadIcon, EyeIcon, LayoutIcon, PaintBoardIcon, SunIcon, MoonIcon, ComputerIcon, UserIcon, CreditCardIcon, SettingsIcon, KeyboardIcon, LanguageCircleIcon, NotificationIcon, MailIcon, ShieldIcon, HelpCircleIcon, File01Icon, LogoutIcon } from "@hugeicons/core-free-icons"
 

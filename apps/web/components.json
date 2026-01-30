@@ -15,7 +15,7 @@
     "hooks": "@/hooks",
     "lib": "@/lib",
     "utils": "@multica/ui/lib/utils",
-    "ui": "@multica/ui/components"
+    "ui": "@multica/ui/components/ui"
   },
   "menuColor": "default",
   "menuAccent": "subtle"

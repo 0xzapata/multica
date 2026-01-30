@@ -15,6 +15,6 @@
     "utils": "@multica/ui/lib/utils",
     "hooks": "@multica/ui/hooks",
     "lib": "@multica/ui/lib",
-    "ui": "@multica/ui/components"
+    "ui": "@multica/ui/components/ui"
   }
 }

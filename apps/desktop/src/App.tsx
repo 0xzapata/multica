@@ -1,19 +1,7 @@
-import { useState } from 'react'
-import { Button } from '@multica/ui/components/button'
+import { ComponentExample } from '@multica/ui/components/component-example'
 
 function App() {
-  const [count, setCount] = useState(0)
-
-  return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="flex flex-col items-center gap-4">
-        <h1 className="text-2xl font-bold">Desktop App</h1>
-        <Button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </Button>
-      </div>
-    </div>
-  )
+  return <ComponentExample />
 }
 
 export default App
