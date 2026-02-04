@@ -1,5 +1,7 @@
 /** RPC Actions - 请求/响应模式 */
 
+import type { Message } from "@mariozechner/pi-ai";
+
 export const RequestAction = "request" as const;
 export const ResponseAction = "response" as const;
 
@@ -65,34 +67,11 @@ export interface GetAgentMessagesParams {
   limit?: number;
 }
 
-/** Content block types from the agent engine */
-export interface TextContentBlock {
-  type: "text";
-  text: string;
-}
-
-export interface ThinkingContentBlock {
-  type: "thinking";
-  thinking: string;
-}
-
-export interface ToolCallBlock {
-  type: "tool_use";
-  id: string;
-  name: string;
-  input: unknown;
-}
-
-export interface ImageContentBlock {
-  type: "image";
-  url: string;
-}
-
-/** Agent message returned by getAgentMessages (mirrors pi-ai Message) */
-export type AgentMessageItem =
-  | { role: "user"; content: string | (TextContentBlock | ImageContentBlock)[]; timestamp: number }
-  | { role: "assistant"; content: (TextContentBlock | ThinkingContentBlock | ToolCallBlock)[]; timestamp: number }
-  | { role: "tool_result"; toolCallId: string; content: (TextContentBlock | ImageContentBlock)[]; isError: boolean; timestamp: number }
+/**
+ * Agent message returned by getAgentMessages.
+ * This is pi-ai's Message type — the backend returns it as-is from SessionManager.loadMessages().
+ */
+export type AgentMessageItem = Message;
 
 /** getAgentMessages - response payload */
 export interface GetAgentMessagesResult {

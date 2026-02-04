@@ -19,13 +19,14 @@ import { v7 as uuidv7 } from "uuid"
 import {
   GatewayClient,
   StreamAction,
-  extractTextFromEvent,
   type ConnectionState,
   type SendErrorResponse,
   type StreamPayload,
-  type StreamMessageEvent,
+  type AgentEvent,
+  type GetAgentMessagesResult,
+  type ContentBlock,
 } from "@multica/sdk"
-import { useMessagesStore } from "./messages"
+import { useMessagesStore, type Message } from "./messages"
 import { clearConnection, type ConnectionInfo } from "./connection"
 
 interface ConnectionStoreState {
@@ -104,23 +105,40 @@ function createClient(
         switch (event.type) {
           case "message_start": {
             store.startStream(payload.streamId, payload.agentId)
-            const text = extractTextFromEvent(event as StreamMessageEvent)
-            if (text) store.appendStream(payload.streamId, text)
+            const content = extractContent(event)
+            if (content.length) store.appendStream(payload.streamId, content)
             break
           }
           case "message_update": {
-            const text = extractTextFromEvent(event as StreamMessageEvent)
-            store.appendStream(payload.streamId, text)
+            const content = extractContent(event)
+            store.appendStream(payload.streamId, content)
             break
           }
           case "message_end": {
-            const text = extractTextFromEvent(event as StreamMessageEvent)
-            store.endStream(payload.streamId, text)
+            const content = extractContent(event)
+            const stopReason = "message" in event
+              ? (event.message as { stopReason?: string })?.stopReason
+              : undefined
+            store.endStream(payload.streamId, content, stopReason)
             break
           }
-          case "tool_execution_start":
-          case "tool_execution_end":
+          case "tool_execution_start": {
+            store.startToolExecution(
+              payload.agentId,
+              event.toolCallId,
+              event.toolName,
+              event.args,
+            )
             break
+          }
+          case "tool_execution_end": {
+            store.endToolExecution(
+              event.toolCallId,
+              event.result,
+              event.isError,
+            )
+            break
+          }
         }
         return
       }
@@ -140,20 +158,41 @@ async function fetchHistory(state: ConnectionStoreState): Promise<void> {
   if (!client || !hubId || !agentId) return
 
   try {
-    const result = await client.request<{
-      messages: Array<{ role: string; content: unknown }>
-      total: number
-    }>(hubId, "getAgentMessages", { agentId, limit: 200 })
+    const result = await client.request<GetAgentMessagesResult>(
+      hubId, "getAgentMessages", { agentId, limit: 200 },
+    )
 
-    const messages = result.messages
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({
-        id: uuidv7(),
-        role: m.role as "user" | "assistant",
-        content: extractText(m.content),
-        agentId: agentId,
-      }))
-      .filter((m) => m.content.length > 0)
+    // Mirror the backend message array directly
+    const messages: Message[] = []
+    for (const m of result.messages) {
+      if (m.role === "user") {
+        messages.push({
+          id: uuidv7(),
+          role: "user",
+          content: toContentBlocks(m.content),
+          agentId,
+        })
+      } else if (m.role === "assistant") {
+        messages.push({
+          id: uuidv7(),
+          role: "assistant",
+          content: toContentBlocks(m.content),
+          agentId,
+          stopReason: m.stopReason,
+        })
+      } else if (m.role === "toolResult") {
+        messages.push({
+          id: uuidv7(),
+          role: "toolResult",
+          content: toContentBlocks(m.content),
+          agentId,
+          toolCallId: m.toolCallId,
+          toolName: m.toolName,
+          toolStatus: m.isError ? "error" : "success",
+          isError: m.isError,
+        })
+      }
+    }
 
     if (messages.length > 0) {
       useMessagesStore.getState().loadMessages(messages)
@@ -163,14 +202,22 @@ async function fetchHistory(state: ConnectionStoreState): Promise<void> {
   }
 }
 
-/** Extract plain text from AgentMessage content (string or content block array) */
-function extractText(content: unknown): string {
-  if (typeof content === "string") return content
-  if (!Array.isArray(content)) return ""
-  return content
-    .filter((c: { type?: string }) => c.type === "text")
-    .map((c: { text?: string }) => c.text ?? "")
-    .join("")
+/** Convert raw backend content (string or block array) to ContentBlock[] */
+function toContentBlocks(content: string | ContentBlock[]): ContentBlock[] {
+  if (typeof content === "string") {
+    return content ? [{ type: "text", text: content }] : []
+  }
+  if (Array.isArray(content)) return content
+  return []
+}
+
+/** Extract content blocks from an AgentEvent that carries a message */
+function extractContent(event: AgentEvent): ContentBlock[] {
+  if (!("message" in event)) return []
+  const msg = event.message
+  if (!msg || !("content" in msg)) return []
+  const content = msg.content
+  return Array.isArray(content) ? content as ContentBlock[] : []
 }
 
 export const useConnectionStore = create<ConnectionStore>()(
