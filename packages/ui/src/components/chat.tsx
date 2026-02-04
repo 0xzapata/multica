@@ -1,56 +1,35 @@
 "use client";
 
-import { useRef, useState, useCallback, useMemo } from "react";
+import { useRef, useCallback } from "react";
 import { Button } from "@multica/ui/components/ui/button";
-import { Textarea } from "@multica/ui/components/ui/textarea";
 import { ChatInput } from "@multica/ui/components/chat-input";
-import { MemoizedMarkdown } from "@multica/ui/components/markdown";
-import { StreamingMarkdown } from "@multica/ui/components/markdown/StreamingMarkdown";
-import { toast } from "@multica/ui/components/ui/sonner";
-import {
-  useHubStore,
-  useMessagesStore,
-  useGatewayStore,
-  useDeviceId,
-  parseConnectionCode,
-  saveConnection,
-} from "@multica/store";
+import { useConnectionStore, useMessagesStore, useAutoConnect } from "@multica/store";
 import { useScrollFade } from "@multica/ui/hooks/use-scroll-fade";
 import { useAutoScroll } from "@multica/ui/hooks/use-auto-scroll";
-import { cn } from "@multica/ui/lib/utils";
+import { ConnectPrompt } from "./connect-prompt";
+import { MessageList } from "./message-list";
+import { ChatSkeleton } from "./chat-skeleton";
 
 export function Chat() {
-  const deviceId = useDeviceId()
-  const activeAgentId = useHubStore((s) => s.activeAgentId)
-  const gwState = useGatewayStore((s) => s.connectionState)
-  const hubId = useGatewayStore((s) => s.hubId)
+  const { loading } = useAutoConnect()
+
+  const agentId = useConnectionStore((s) => s.agentId)
+  const gwState = useConnectionStore((s) => s.connectionState)
+  const hubId = useConnectionStore((s) => s.hubId)
 
   const messages = useMessagesStore((s) => s.messages)
   const streamingIds = useMessagesStore((s) => s.streamingIds)
-  const filtered = useMemo(() => messages.filter(m => m.agentId === activeAgentId), [messages, activeAgentId])
 
-  const isConnected = gwState === "registered" && !!hubId && !!activeAgentId
-  const [codeInput, setCodeInput] = useState("")
-
-  const handleConnect = useCallback(() => {
-    const trimmed = codeInput.trim()
-    if (!trimmed || !deviceId) return
-    try {
-      const info = parseConnectionCode(trimmed)
-      saveConnection(info)
-      useGatewayStore.getState().connectWithCode(info, deviceId)
-      setCodeInput("")
-    } catch (e) {
-      toast.error((e as Error).message)
-    }
-  }, [codeInput, deviceId])
+  const isConnected = gwState === "registered" && !!hubId && !!agentId
 
   const handleSend = useCallback((text: string) => {
-    const { hubId } = useGatewayStore.getState()
-    const agentId = useHubStore.getState().activeAgentId
-    if (!hubId || !agentId) return
-    useMessagesStore.getState().addUserMessage(text, agentId)
-    useGatewayStore.getState().send(hubId, "message", { agentId, content: text })
+    const { hubId, agentId, send, connectionState } = useConnectionStore.getState()
+    if (connectionState !== "registered" || !hubId || !agentId) return
+    useMessagesStore.getState().sendMessage(text, { hubId, agentId, send })
+  }, [])
+
+  const handleDisconnect = useCallback(() => {
+    useConnectionStore.getState().disconnect()
   }, [])
 
   const mainRef = useRef<HTMLElement>(null)
@@ -59,71 +38,30 @@ export function Chat() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden w-full">
+      {isConnected && (
+        <div className="flex items-center justify-end px-4 py-1 max-w-4xl mx-auto w-full">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleDisconnect}
+            className="text-xs text-muted-foreground"
+          >
+            Disconnect
+          </Button>
+        </div>
+      )}
+
       <main ref={mainRef} className="flex-1 overflow-y-auto min-h-0" style={fadeStyle}>
-        {!isConnected ? (
-          <div className="flex flex-col items-center justify-center h-full gap-4 px-4">
-            <div className="text-center space-y-1">
-              <p className="text-sm text-muted-foreground">Paste a connection code to start</p>
-              {(gwState === "connecting" || gwState === "connected") && (
-                <p className="text-xs text-muted-foreground/60 animate-pulse">Connecting...</p>
-              )}
-            </div>
-            <div className="w-full max-w-sm space-y-3">
-              <Textarea
-                value={codeInput}
-                onChange={(e) => setCodeInput(e.target.value)}
-                placeholder="Paste connection code here..."
-                className="text-xs font-mono min-h-[100px] resize-none"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                    e.preventDefault()
-                    handleConnect()
-                  }
-                }}
-              />
-              <Button
-                size="sm"
-                onClick={handleConnect}
-                disabled={!codeInput.trim() || gwState === "connecting"}
-                className="w-full text-xs"
-              >
-                Connect
-              </Button>
-            </div>
-          </div>
-        ) : filtered.length === 0 ? (
+        {loading ? (
+          <ChatSkeleton />
+        ) : !isConnected ? (
+          <ConnectPrompt />
+        ) : messages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
             Send a message to start the conversation
           </div>
         ) : (
-          <div className="px-4 py-6 space-y-6 max-w-4xl mx-auto">
-            {filtered.map((msg) => {
-              const isStreaming = streamingIds.has(msg.id)
-              return (
-                <div
-                  key={msg.id}
-                  className={cn(
-                    "flex",
-                    msg.role === "user" ? "justify-end" : "justify-start"
-                  )}
-                >
-                  <div
-                    className={cn(
-                      msg.role === "user" ? "bg-muted rounded-md max-w-[60%] p-1 px-2.5" : "w-full p-1 px-2.5"
-                    )}
-                  >
-                    {isStreaming ? (
-                      <StreamingMarkdown content={msg.content} isStreaming={true} mode="minimal" />
-                    ) : (
-                      <MemoizedMarkdown mode="minimal" id={msg.id}>
-                        {msg.content}
-                      </MemoizedMarkdown>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          <MessageList messages={messages} streamingIds={streamingIds} />
         )}
       </main>
 

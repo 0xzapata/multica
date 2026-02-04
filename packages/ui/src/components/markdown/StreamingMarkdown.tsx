@@ -16,8 +16,16 @@ interface Block {
 }
 
 /**
- * Simple hash function for cache keys
- * Uses djb2 algorithm - fast and produces good distribution
+ * djb2 hash (XOR variant) by Daniel J. Bernstein.
+ * Used to generate stable React keys for completed content blocks.
+ *
+ * - 5381: empirically chosen initial value that produces fewer collisions
+ * - (hash << 5) + hash: equivalent to hash * 33
+ * - ^ charCode: XOR variant, favored by Bernstein over additive version
+ * - >>> 0: convert to unsigned 32-bit integer
+ *
+ * Not cryptographic — just fast with good distribution for short strings.
+ * @see http://www.cse.yorku.ca/~oz/hash.html
  */
 function simpleHash(str: string): string {
   let hash = 5381
@@ -164,7 +172,7 @@ export function StreamingMarkdown({
   }
 
   const indicator = (
-    <div className="flex items-center gap-2 py-1 text-muted-foreground">
+    <div className="absolute bottom-1 left-6 flex items-center gap-2 py-1 text-muted-foreground">
       <Spinner className="text-xs" />
       <span className="text-xs">Generating...</span>
     </div>
