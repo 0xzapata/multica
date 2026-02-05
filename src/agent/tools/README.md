@@ -58,7 +58,7 @@ The tools system provides LLM agents with capabilities to interact with the exte
 | Exec           | `exec`           | Execute shell commands              |
 | Process        | `process`        | Manage long-running processes       |
 | Web Fetch      | `web_fetch`      | Fetch and extract content from URLs |
-| Web Search     | `web_search`     | Search the web (requires API key)   |
+| Web Search     | `web_search`     | Search the web via Devv Search      |
 | Sessions Spawn | `sessions_spawn` | Spawn a sub-agent session           |
 
 > **Note**: Agents use file-based memory (`memory.md`, `memory/*.md`) via `read` and `edit` tools instead of dedicated memory tools.

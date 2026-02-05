@@ -116,7 +116,7 @@ export function createWebSearchTool(): AgentTool<typeof WebSearchSchema, unknown
     name: "web_search",
     label: "Web Search",
     description:
-      "Search the web for information. Returns a list of results with titles, URLs, and snippets.",
+      "Search the web via Devv Search. Returns a list of results with titles, URLs, and snippets.",
     parameters: WebSearchSchema,
     execute: async (_toolCallId, args) => {
       const params = args as WebSearchArgs;

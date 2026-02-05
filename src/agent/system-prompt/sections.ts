@@ -23,7 +23,7 @@ const CORE_TOOL_SUMMARIES: Record<string, string> = {
   glob: "Find files by glob pattern",
   exec: "Run shell commands",
   process: "Manage background exec sessions",
-  web_search: "Search the web",
+  web_search: "Search the web via Devv Search",
   web_fetch: "Fetch and extract readable content from a URL",
   memory_search: "Search memory files by keyword",
   sessions_spawn: "Spawn a sub-agent session",

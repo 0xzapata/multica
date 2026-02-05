@@ -26,7 +26,7 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
   exec: 'Execute shell commands',
   process: 'Manage background processes',
   web_fetch: 'Fetch content from URLs',
-  web_search: 'Search the web (requires API key)',
+  web_search: 'Search the web via Devv Search',
   memory_get: 'Get stored memory value',
   memory_set: 'Store a memory value',
   memory_delete: 'Delete a memory value',
