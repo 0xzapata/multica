@@ -39,7 +39,7 @@ const TOOL_DISPLAY: Record<string, { label: string; icon: LucideIcon }> = {
   memory_set:      { label: "MemorySet",     icon: Database },
   memory_delete:   { label: "MemoryDelete",  icon: Database },
   memory_list:     { label: "MemoryList",    icon: Database },
-  sessions_spawn:  { label: "SpawnSession",  icon: GitBranch },
+  delegate:        { label: "Delegate",      icon: GitBranch },
   data:            { label: "Data",          icon: BarChart3 },
 }
 
@@ -81,11 +81,12 @@ function getSubtitle(toolName: string, args?: Record<string, unknown>): string {
       const ticker = params?.ticker ? String(params.ticker).toUpperCase() : ""
       return ticker ? `${action} ${ticker}` : action
     }
-    case "sessions_spawn": {
-      const label = args.label ? String(args.label) : ""
-      if (label) return label.length > 60 ? label.slice(0, 57) + "…" : label
-      const task = String(args.task ?? "")
-      return task.length > 60 ? task.slice(0, 57) + "…" : task
+    case "delegate": {
+      const tasks = args.tasks as Array<{ label?: string; task?: string }> | undefined
+      if (!tasks?.length) return ""
+      const labels = tasks.map((t, i) => t.label || `Task ${i + 1}`)
+      const summary = labels.join(", ")
+      return summary.length > 60 ? summary.slice(0, 57) + "…" : summary
     }
     default:
       return ""
@@ -106,7 +107,7 @@ const RUNNING_LABELS: Record<string, string> = {
   web_search: "searching…",
   web_fetch: "fetching…",
   data: "fetching…",
-  sessions_spawn: "spawning…",
+  delegate: "delegating…",
 }
 
 /** Stats derived from tool result content */

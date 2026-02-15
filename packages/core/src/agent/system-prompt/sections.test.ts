@@ -167,14 +167,14 @@ describe("buildToolCallStyleSection", () => {
 });
 
 describe("buildConditionalToolSections", () => {
-  it("includes sub-agents section when sessions_spawn present in full mode", () => {
-    const result = buildConditionalToolSections(["sessions_spawn"], "full");
-    expect(result.join("\n")).toContain("## Sub-Agents");
+  it("includes delegation section when delegate present in full mode", () => {
+    const result = buildConditionalToolSections(["delegate"], "full");
+    expect(result.join("\n")).toContain("## Delegation");
   });
 
-  it("excludes sub-agents section in minimal mode", () => {
-    const result = buildConditionalToolSections(["sessions_spawn"], "minimal");
-    expect(result.join("\n")).not.toContain("## Sub-Agents");
+  it("excludes delegation section in minimal mode", () => {
+    const result = buildConditionalToolSections(["delegate"], "minimal");
+    expect(result.join("\n")).not.toContain("## Delegation");
   });
 
   it("includes web access section when web tools present", () => {

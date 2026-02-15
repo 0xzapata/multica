@@ -7,7 +7,7 @@
  */
 
 import { join } from "node:path";
-import { Agent, Hub, listSubagentRuns } from "@multica/core";
+import { Agent, Hub } from "@multica/core";
 import type { AgentOptions } from "@multica/core";
 import type { ToolsConfig } from "@multica/core";
 import { DATA_DIR } from "@multica/utils";
@@ -238,52 +238,8 @@ export async function runCommand(args: string[]): Promise<void> {
       console.error(`Error: ${result.error}`);
       process.exitCode = 1;
     }
-
-    // Wait for sub-agents to complete and parent to process their results.
-    // Without this, CLI exits before sub-agent announcements are delivered.
-    await waitForSubagents(agent);
   } finally {
     hub.shutdown();
   }
 }
 
-/**
- * Wait for any running sub-agents to complete, then output their findings.
- *
- * In CLI mode, the parent Agent is not registered with the Hub, so the normal
- * announce flow (Hub → writeInternal) can't deliver results. Instead, we poll
- * the registry and print findings directly once all sub-agents finish.
- *
- * Max wait: 30 minutes (matches default sub-agent timeout).
- */
-async function waitForSubagents(agent: Agent): Promise<void> {
-  const MAX_WAIT_MS = 30 * 60 * 1000;
-  const POLL_INTERVAL_MS = 2000;
-  const start = Date.now();
-
-  const allRuns = listSubagentRuns(agent.sessionId);
-  if (allRuns.length === 0) return;
-
-  // Phase 1: Wait for all sub-agent runs to finish
-  while (Date.now() - start < MAX_WAIT_MS) {
-    const runs = listSubagentRuns(agent.sessionId);
-    const running = runs.filter((r) => !r.endedAt);
-    if (running.length === 0) break;
-    console.error(dim(`[waiting for ${running.length} sub-agent(s)...]`));
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-  }
-
-  // Phase 2: Output sub-agent findings directly (bypasses Hub announce flow)
-  const completedRuns = listSubagentRuns(agent.sessionId).filter((r) => r.endedAt);
-  if (completedRuns.length === 0) return;
-
-  console.error(dim(`[${completedRuns.length} sub-agent(s) completed]`));
-
-  for (const run of completedRuns) {
-    const displayName = run.label || run.task.slice(0, 60);
-    const status = run.outcome?.status ?? "unknown";
-    const findings = run.findings || "(no output)";
-    console.log(`\n--- Sub-agent: ${displayName} [${status}] ---`);
-    console.log(findings);
-  }
-}

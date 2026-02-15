@@ -13,7 +13,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
   'group:runtime': ['exec', 'process'],
   'group:web': ['web_search', 'web_fetch'],
   'group:memory': ['memory_search'],
-  'group:subagent': ['sessions_spawn'],
+  'group:subagent': ['delegate'],
   'group:cron': ['cron'],
 }
 

@@ -11,7 +11,7 @@ const PROFILE = {
   config: { name: "TestAgent" },
 };
 
-const TOOLS = ["read", "write", "edit", "glob", "exec", "sessions_spawn", "web_search"];
+const TOOLS = ["read", "write", "edit", "glob", "exec", "delegate", "web_search"];
 
 describe("buildSystemPrompt", () => {
   // ── Full mode ─────────────────────────────────────────────────────────
@@ -43,9 +43,9 @@ describe("buildSystemPrompt", () => {
     expect(result).toContain("## Tool Call Style");
   });
 
-  it("full mode includes sub-agents section when sessions_spawn present", () => {
-    const result = buildSystemPrompt({ mode: "full", tools: ["sessions_spawn"] });
-    expect(result).toContain("## Sub-Agents");
+  it("full mode includes delegation section when delegate present", () => {
+    const result = buildSystemPrompt({ mode: "full", tools: ["delegate"] });
+    expect(result).toContain("## Delegation");
   });
 
   it("full mode includes web access section when web tools present", () => {
@@ -131,9 +131,9 @@ describe("buildSystemPrompt", () => {
     expect(result).not.toContain("## Skills");
   });
 
-  it("minimal mode excludes sub-agents section even with sessions_spawn", () => {
-    const result = buildSystemPrompt({ mode: "minimal", tools: ["sessions_spawn"] });
-    expect(result).not.toContain("## Sub-Agents");
+  it("minimal mode excludes delegation section even with delegate", () => {
+    const result = buildSystemPrompt({ mode: "minimal", tools: ["delegate"] });
+    expect(result).not.toContain("## Delegation");
   });
 
   // ── None mode ─────────────────────────────────────────────────────────

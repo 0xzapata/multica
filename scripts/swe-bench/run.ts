@@ -217,7 +217,7 @@ async function runTask(
     enableSkills: false,
     tools: {
       // Only allow coding tools — no web, no cron, no sessions
-      deny: ["web_fetch", "web_search", "cron", "data", "sessions_spawn", "sessions_list", "memory_search", "send_file"],
+      deny: ["web_fetch", "web_search", "cron", "data", "delegate", "memory_search", "send_file"],
     },
   };
 
