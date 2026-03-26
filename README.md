@@ -115,7 +115,7 @@ Or build from source:
 
 ```bash
 make build
-cp server/bin/multica /usr/local/bin/multica
+cp server/bin/multica /usr/local/bin/multica   # or ~/.local/bin/multica
 ```
 
 ### Authentication
