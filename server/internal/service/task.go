@@ -137,10 +137,12 @@ func (s *TaskService) EnqueueTaskForAgentflow(ctx context.Context, agentflow db.
 	}
 
 	// Link the task back to the run.
-	_ = s.Queries.SetAgentflowRunTaskID(ctx, db.SetAgentflowRunTaskIDParams{
+	if err := s.Queries.SetAgentflowRunTaskID(ctx, db.SetAgentflowRunTaskIDParams{
 		ID:     runID,
 		TaskID: task.ID,
-	})
+	}); err != nil {
+		slog.Warn("failed to link task to agentflow run", "run_id", util.UUIDToString(runID), "task_id", util.UUIDToString(task.ID), "error", err)
+	}
 
 	slog.Info("agentflow task enqueued", "task_id", util.UUIDToString(task.ID), "agentflow_id", util.UUIDToString(agentflow.ID), "agent_id", util.UUIDToString(agentflow.AgentID))
 	return task, nil
@@ -348,11 +350,13 @@ func (s *TaskService) CompleteTask(ctx context.Context, taskID pgtype.UUID, resu
 				ID:     task.AgentflowRunID,
 				Status: "completed",
 				Output: pgtype.Text{String: payload.Output, Valid: payload.Output != ""},
+				TaskID: task.ID,
 			})
 		} else {
-			s.Queries.UpdateAgentflowRunStatus(ctx, db.UpdateAgentflowRunStatusParams{
+			s.Queries.UpdateAgentflowRunResult(ctx, db.UpdateAgentflowRunResultParams{
 				ID:     task.AgentflowRunID,
 				Status: "completed",
+				TaskID: task.ID,
 			})
 		}
 	}
@@ -402,6 +406,7 @@ func (s *TaskService) FailTask(ctx context.Context, taskID pgtype.UUID, errMsg s
 			ID:     task.AgentflowRunID,
 			Status: "failed",
 			Error:  pgtype.Text{String: errMsg, Valid: errMsg != ""},
+			TaskID: task.ID,
 		})
 	}
 

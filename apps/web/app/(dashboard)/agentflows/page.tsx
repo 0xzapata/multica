@@ -21,6 +21,7 @@ import type {
   AgentflowRun,
   Agent,
   CreateAgentflowRequest,
+  TaskMessagePayload,
 } from "@/shared/types";
 import {
   Dialog,
@@ -641,6 +642,29 @@ function AgentflowDetail({ agentflow }: { agentflow: Agentflow }) {
 }
 
 function RunsTab({ runs, loading }: { runs: AgentflowRun[]; loading: boolean }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [taskMessages, setTaskMessages] = useState<TaskMessagePayload[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+
+  const loadMessages = async (run: AgentflowRun) => {
+    if (expandedId === run.id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(run.id);
+    if (run.task_id) {
+      setMessagesLoading(true);
+      try {
+        const msgs = await api.listTaskMessages(run.task_id);
+        setTaskMessages(msgs);
+      } catch {
+        setTaskMessages([]);
+      } finally {
+        setMessagesLoading(false);
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-3">
@@ -666,32 +690,94 @@ function RunsTab({ runs, loading }: { runs: AgentflowRun[]; loading: boolean }) 
         const Icon = cfg!.icon;
         const color = cfg!.color;
         const label = cfg!.label;
+        const isExpanded = expandedId === run.id;
         return (
-          <div
-            key={run.id}
-            className="flex items-center justify-between rounded-lg border px-4 py-3"
-          >
-            <div className="flex items-center gap-3">
-              <Icon
-                className={`h-4 w-4 ${color} ${run.status === "running" ? "animate-spin" : ""}`}
-              />
-              <div>
-                <span className="text-sm font-medium">{label}</span>
-                <p className="text-xs text-muted-foreground">
-                  {new Date(run.created_at).toLocaleString()}
-                </p>
+          <div key={run.id} className="rounded-lg border">
+            <button
+              onClick={() => loadMessages(run)}
+              className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-accent/30 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <Icon
+                  className={`h-4 w-4 ${color} ${run.status === "running" ? "animate-spin" : ""}`}
+                />
+                <div>
+                  <span className="text-sm font-medium">{label}</span>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(run.created_at).toLocaleString()}
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="text-right text-xs text-muted-foreground">
-              {run.completed_at && (
-                <span>
-                  Completed {new Date(run.completed_at).toLocaleString()}
-                </span>
-              )}
-              {run.error && (
-                <span className="text-destructive">{run.error}</span>
-              )}
-            </div>
+              <div className="flex items-center gap-2">
+                {run.completed_at && (
+                  <span className="text-xs text-muted-foreground">
+                    {Math.round((new Date(run.completed_at).getTime() - new Date(run.created_at).getTime()) / 1000)}s
+                  </span>
+                )}
+                <ChevronDown
+                  className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                />
+              </div>
+            </button>
+
+            {isExpanded && (
+              <div className="border-t px-4 py-3 space-y-3">
+                {/* Output */}
+                {run.output && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Output</p>
+                    <div className="rounded-md bg-muted/50 p-3 text-sm whitespace-pre-wrap">
+                      {run.output}
+                    </div>
+                  </div>
+                )}
+
+                {/* Error */}
+                {run.error && (
+                  <div>
+                    <p className="text-xs font-medium text-destructive mb-1">Error</p>
+                    <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive whitespace-pre-wrap">
+                      {run.error}
+                    </div>
+                  </div>
+                )}
+
+                {/* Task messages (live log) */}
+                {run.task_id && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                      Execution Log ({messagesLoading ? "loading..." : `${taskMessages.length} messages`})
+                    </p>
+                    {messagesLoading ? (
+                      <Skeleton className="h-20 w-full" />
+                    ) : taskMessages.length > 0 ? (
+                      <div className="max-h-64 overflow-y-auto rounded-md border bg-muted/30 p-2 space-y-1">
+                        {taskMessages.map((msg, i) => (
+                          <div key={i} className="text-xs font-mono">
+                            {msg.type === "tool_use" && msg.tool && (
+                              <span className="text-primary">[{msg.tool}]</span>
+                            )}
+                            {msg.type === "text" && msg.content && (
+                              <span className="text-foreground">{msg.content.slice(0, 200)}{msg.content.length > 200 ? "..." : ""}</span>
+                            )}
+                            {msg.type === "tool_result" && msg.output && (
+                              <span className="text-muted-foreground">{msg.output.slice(0, 150)}{msg.output.length > 150 ? "..." : ""}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No messages recorded.</p>
+                    )}
+                  </div>
+                )}
+
+                {/* No output and no error */}
+                {!run.output && !run.error && !run.task_id && run.status === "completed" && (
+                  <p className="text-xs text-muted-foreground">Run completed with no output.</p>
+                )}
+              </div>
+            )}
           </div>
         );
       })}
