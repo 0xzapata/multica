@@ -44,8 +44,8 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { useAuthStore } from "@/features/auth";
 import { useWorkspaceStore } from "@/features/workspace";
 import { useQuery } from "@tanstack/react-query";
-import { useWorkspaceId } from "@core/hooks";
-import { inboxListOptions, deduplicateInboxItems } from "@core/inbox/queries";
+import { inboxKeys, deduplicateInboxItems } from "@core/inbox/queries";
+import { api } from "@/shared/api";
 import { useModalStore } from "@/features/modals";
 
 const primaryNav = [
@@ -76,8 +76,12 @@ export function AppSidebar() {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const switchWorkspace = useWorkspaceStore((s) => s.switchWorkspace);
 
-  const wsId = useWorkspaceId();
-  const { data: inboxItems = [] } = useQuery(inboxListOptions(wsId));
+  const wsId = workspace?.id;
+  const { data: inboxItems = [] } = useQuery({
+    queryKey: wsId ? inboxKeys.list(wsId) : ["inbox", "disabled"],
+    queryFn: () => api.listInbox(),
+    enabled: !!wsId,
+  });
   const unreadCount = React.useMemo(
     () => deduplicateInboxItems(inboxItems).filter((i) => !i.read).length,
     [inboxItems],
