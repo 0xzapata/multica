@@ -60,7 +60,7 @@ import { AvatarGroup, AvatarGroupCount } from "@multica/ui/components/ui/avatar"
 import { ActorAvatar } from "../../common/actor-avatar";
 import type { Issue, UpdateIssueRequest, IssueStatus, IssuePriority, TimelineEntry } from "@multica/core/types";
 import { ALL_STATUSES, STATUS_CONFIG, PRIORITY_ORDER, PRIORITY_CONFIG } from "@multica/core/issues/config";
-import { StatusIcon, PriorityIcon, DueDatePicker, AssigneePicker, canAssignAgent } from ".";
+import { StatusIcon, PriorityIcon, StatusPicker, PriorityPicker, DueDatePicker, AssigneePicker, canAssignAgent } from ".";
 import { ProjectPicker } from "../../projects/components/project-picker";
 import { CommentCard } from "./comment-card";
 import { CommentInput } from "./comment-input";
@@ -1113,42 +1113,20 @@ export function IssueDetail({ issueId, onDelete, defaultSidebarOpen = true, layo
             {propertiesOpen && <div className="space-y-0.5 pl-2">
               {/* Status */}
               <PropRow label="Status">
-                <DropdownMenu>
-                  <DropdownMenuTrigger className="flex items-center gap-1.5 cursor-pointer rounded px-1 -mx-1 hover:bg-accent/30 transition-colors overflow-hidden">
-                    <StatusIcon status={issue.status} className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{STATUS_CONFIG[issue.status].label}</span>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-44">
-                    {ALL_STATUSES.map((s) => (
-                      <DropdownMenuItem key={s} onClick={() => handleUpdateField({ status: s })}>
-                        <StatusIcon status={s} className="h-3.5 w-3.5" />
-                        {STATUS_CONFIG[s].label}
-                        {s === issue.status && <Check className="ml-auto h-3.5 w-3.5" />}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <StatusPicker
+                  status={issue.status}
+                  onUpdate={handleUpdateField}
+                  align="start"
+                />
               </PropRow>
 
               {/* Priority */}
               <PropRow label="Priority">
-                <DropdownMenu>
-                  <DropdownMenuTrigger className="flex items-center gap-1.5 cursor-pointer rounded px-1 -mx-1 hover:bg-accent/30 transition-colors overflow-hidden">
-                    <PriorityIcon priority={issue.priority} className="shrink-0" />
-                    <span className="truncate">{PRIORITY_CONFIG[issue.priority].label}</span>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-44">
-                    {PRIORITY_ORDER.map((p) => (
-                      <DropdownMenuItem key={p} onClick={() => handleUpdateField({ priority: p })}>
-                        <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium ${PRIORITY_CONFIG[p].badgeBg} ${PRIORITY_CONFIG[p].badgeText}`}>
-                          <PriorityIcon priority={p} className="h-3 w-3" inheritColor />
-                          {PRIORITY_CONFIG[p].label}
-                        </span>
-                        {p === issue.priority && <Check className="ml-auto h-3.5 w-3.5" />}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <PriorityPicker
+                  priority={issue.priority}
+                  onUpdate={handleUpdateField}
+                  align="start"
+                />
               </PropRow>
 
               {/* Assignee */}
