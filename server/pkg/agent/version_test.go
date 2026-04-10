@@ -13,6 +13,7 @@ func TestParseSemver(t *testing.T) {
 		{"2.0.0", semver{2, 0, 0}, false},
 		{"v2.1.100", semver{2, 1, 100}, false},
 		{"2.1.100 (Claude Code)", semver{2, 1, 100}, false},
+		{"codex-cli 0.118.0", semver{0, 118, 0}, false},
 		{"1.0.20", semver{1, 0, 20}, false},
 		{"invalid", semver{}, true},
 		{"", semver{}, true},
@@ -63,7 +64,10 @@ func TestCheckMinVersion(t *testing.T) {
 		{"claude", "1.0.128", true},
 		{"claude", "1.9.99", true},
 		{"claude", "invalid", true},
-		{"codex", "0.0.1", false}, // no minimum defined for codex
+		{"codex", "codex-cli 0.118.0", false},
+		{"codex", "codex-cli 0.100.0", false},
+		{"codex", "codex-cli 0.99.0", true},
+		{"codex", "codex-cli 0.50.0", true},
 		{"unknown", "1.0.0", false},
 	}
 	for _, tt := range tests {
