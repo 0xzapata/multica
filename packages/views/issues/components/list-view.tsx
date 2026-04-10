@@ -6,7 +6,7 @@ import { Accordion } from "@base-ui/react/accordion";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@multica/ui/components/ui/tooltip";
 import { Button } from "@multica/ui/components/ui/button";
 import type { Issue, IssueStatus } from "@multica/core/types";
-import { useLoadMoreDoneIssues, useLoadMoreMyDoneIssues } from "@multica/core/issues/mutations";
+import { useLoadMoreDoneIssues } from "@multica/core/issues/mutations";
 import type { MyIssuesFilter } from "@multica/core/issues/queries";
 import { STATUS_CONFIG } from "@multica/core/issues/config";
 import { useModalStore } from "@multica/core/modals";
@@ -47,10 +47,9 @@ export function ListView({
   const selectedIds = useIssueSelectionStore((s) => s.selectedIds);
   const select = useIssueSelectionStore((s) => s.select);
   const deselect = useIssueSelectionStore((s) => s.deselect);
-  const wsHook = useLoadMoreDoneIssues();
-  const myHook = useLoadMoreMyDoneIssues(myIssuesScope ?? "", myIssuesFilter ?? {});
+  const myIssuesOpts = myIssuesScope ? { scope: myIssuesScope, filter: myIssuesFilter ?? {} } : undefined;
   const { loadMore, hasMore, isLoading: loadingMore, doneTotal: hookDoneTotal } =
-    myIssuesScope ? myHook : wsHook;
+    useLoadMoreDoneIssues(myIssuesOpts);
   const displayDoneTotal = doneTotalOverride ?? hookDoneTotal;
 
   const issuesByStatus = useMemo(() => {

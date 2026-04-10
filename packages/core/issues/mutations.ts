@@ -31,54 +31,14 @@ export type ToggleIssueReactionVars = {
 // Done issue pagination
 // ---------------------------------------------------------------------------
 
-export function useLoadMoreDoneIssues() {
+export function useLoadMoreDoneIssues(myIssues?: { scope: string; filter: MyIssuesFilter }) {
   const qc = useQueryClient();
   const wsId = useWorkspaceId();
   const [isLoading, setIsLoading] = useState(false);
 
-  const cache = qc.getQueryData<ListIssuesResponse>(issueKeys.list(wsId));
-  const doneLoaded = cache
-    ? cache.issues.filter((i) => i.status === "done").length
-    : 0;
-  const doneTotal = cache?.doneTotal ?? 0;
-  const hasMore = doneLoaded < doneTotal;
-
-  const loadMore = useCallback(async () => {
-    if (isLoading || !hasMore) return;
-    setIsLoading(true);
-    try {
-      const res = await api.listIssues({
-        status: "done",
-        limit: CLOSED_PAGE_SIZE,
-        offset: doneLoaded,
-      });
-      qc.setQueryData<ListIssuesResponse>(issueKeys.list(wsId), (old) => {
-        if (!old) return old;
-        const existingIds = new Set(old.issues.map((i) => i.id));
-        const newIssues = res.issues.filter((i) => !existingIds.has(i.id));
-        return {
-          ...old,
-          issues: [...old.issues, ...newIssues],
-          doneTotal: res.total,
-        };
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [qc, wsId, doneLoaded, hasMore, isLoading]);
-
-  return { loadMore, hasMore, isLoading, doneTotal };
-}
-
-/**
- * Paginate done issues for a My Issues scope (server-filtered).
- */
-export function useLoadMoreMyDoneIssues(scope: string, filter: MyIssuesFilter) {
-  const qc = useQueryClient();
-  const wsId = useWorkspaceId();
-  const [isLoading, setIsLoading] = useState(false);
-
-  const queryKey = issueKeys.myList(wsId, scope, filter);
+  const queryKey = myIssues
+    ? issueKeys.myList(wsId, myIssues.scope, myIssues.filter)
+    : issueKeys.list(wsId);
   const cache = qc.getQueryData<ListIssuesResponse>(queryKey);
   const doneLoaded = cache
     ? cache.issues.filter((i) => i.status === "done").length
@@ -94,7 +54,7 @@ export function useLoadMoreMyDoneIssues(scope: string, filter: MyIssuesFilter) {
         status: "done",
         limit: CLOSED_PAGE_SIZE,
         offset: doneLoaded,
-        ...filter,
+        ...myIssues?.filter,
       });
       qc.setQueryData<ListIssuesResponse>(queryKey, (old) => {
         if (!old) return old;
@@ -109,7 +69,7 @@ export function useLoadMoreMyDoneIssues(scope: string, filter: MyIssuesFilter) {
     } finally {
       setIsLoading(false);
     }
-  }, [qc, queryKey, doneLoaded, hasMore, isLoading, filter]);
+  }, [qc, queryKey, doneLoaded, hasMore, isLoading, myIssues?.filter]);
 
   return { loadMore, hasMore, isLoading, doneTotal };
 }

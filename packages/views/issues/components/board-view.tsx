@@ -18,7 +18,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { Eye, MoreHorizontal } from "lucide-react";
 import type { Issue, IssueStatus } from "@multica/core/types";
 import { Button } from "@multica/ui/components/ui/button";
-import { useLoadMoreDoneIssues, useLoadMoreMyDoneIssues } from "@multica/core/issues/mutations";
+import { useLoadMoreDoneIssues } from "@multica/core/issues/mutations";
 import type { MyIssuesFilter } from "@multica/core/issues/queries";
 import {
   DropdownMenu,
@@ -126,10 +126,9 @@ export function BoardView({
 }) {
   const sortBy = useViewStore((s) => s.sortBy);
   const sortDirection = useViewStore((s) => s.sortDirection);
-  const wsHook = useLoadMoreDoneIssues();
-  const myHook = useLoadMoreMyDoneIssues(myIssuesScope ?? "", myIssuesFilter ?? {});
+  const myIssuesOpts = myIssuesScope ? { scope: myIssuesScope, filter: myIssuesFilter ?? {} } : undefined;
   const { loadMore, hasMore, isLoading: loadingMore, doneTotal: hookDoneTotal } =
-    myIssuesScope ? myHook : wsHook;
+    useLoadMoreDoneIssues(myIssuesOpts);
   const displayDoneTotal = doneTotalOverride ?? hookDoneTotal;
 
   // --- Drag state ---

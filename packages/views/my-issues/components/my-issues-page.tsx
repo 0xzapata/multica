@@ -21,7 +21,7 @@ import { BatchActionToolbar } from "../../issues/components/batch-action-toolbar
 import { registerViewStoreForWorkspaceSync } from "@multica/core/issues/stores/view-store";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { myIssueListOptions, type MyIssuesFilter } from "@multica/core/issues/queries";
-import { useUpdateIssue, useLoadMoreMyDoneIssues } from "@multica/core/issues/mutations";
+import { useUpdateIssue, useLoadMoreDoneIssues } from "@multica/core/issues/mutations";
 import { myIssuesViewStore } from "@multica/core/issues/stores/my-issues-view-store";
 import { MyIssuesHeader } from "./my-issues-header";
 
@@ -71,7 +71,7 @@ export function MyIssuesPage() {
     myIssueListOptions(wsId, scope, filter),
   );
 
-  const { doneTotal } = useLoadMoreMyDoneIssues(scope, filter);
+  const { doneTotal } = useLoadMoreDoneIssues({ scope, filter });
 
   // Apply status/priority filters from view store
   const issues = useMemo(
