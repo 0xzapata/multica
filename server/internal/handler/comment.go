@@ -369,34 +369,13 @@ func (h *Handler) isReplyToMemberThread(parent *db.Comment, content string, issu
 func (h *Handler) enqueueMentionedAgentTasks(ctx context.Context, issue db.Issue, comment db.Comment, parentComment *db.Comment, authorType, authorID string) {
 	wsID := uuidToString(issue.WorkspaceID)
 	mentions := util.ParseMentions(comment.Content)
-	// When replying in a thread, also include mentions from the parent comment
-	// so that agents mentioned in the thread root are triggered by replies.
-	// However, skip inheritance when the reply explicitly @mentions only
-	// non-agent entities (members, issues) — the user is directing the reply
-	// at other people, not requesting work from agents in the parent thread.
-	if parentComment != nil {
-		hasAgentMention := false
-		hasNonAgentMention := false
-		for _, m := range mentions {
-			if m.Type == "agent" {
-				hasAgentMention = true
-			} else {
-				hasNonAgentMention = true
-			}
-		}
-		if hasAgentMention || !hasNonAgentMention {
-			parentMentions := util.ParseMentions(parentComment.Content)
-			seen := make(map[string]bool, len(mentions))
-			for _, m := range mentions {
-				seen[m.Type+":"+m.ID] = true
-			}
-			for _, m := range parentMentions {
-				if !seen[m.Type+":"+m.ID] {
-					mentions = append(mentions, m)
-					seen[m.Type+":"+m.ID] = true
-				}
-			}
-		}
+	// When replying in a thread, inherit mentions from the parent comment
+	// so that agents mentioned in the thread root are triggered by replies —
+	// but only when the reply contains no mentions at all (a plain follow-up).
+	// If the reply explicitly @mentions anyone (agents or members), the user
+	// is making a deliberate choice about who to involve; don't auto-inherit.
+	if parentComment != nil && len(mentions) == 0 {
+		mentions = util.ParseMentions(parentComment.Content)
 	}
 	for _, m := range mentions {
 		if m.Type != "agent" {
