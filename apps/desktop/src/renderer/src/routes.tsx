@@ -18,6 +18,7 @@ import { AgentsPage } from "@multica/views/agents";
 import { InboxPage } from "@multica/views/inbox";
 import { SettingsPage } from "@multica/views/settings";
 import { OnboardingWizard } from "@multica/views/onboarding";
+import { InvitePage } from "@multica/views/invite";
 import { useNavigation } from "@multica/views/navigation";
 import { Server } from "lucide-react";
 import { DaemonSettingsTab } from "./components/daemon-settings-tab";
@@ -55,6 +56,13 @@ function PageShell() {
 function OnboardingRoute() {
   const nav = useNavigation();
   return <OnboardingWizard onComplete={() => nav.push("/issues")} />;
+}
+
+function InviteRoute() {
+  const matches = useMatches();
+  const match = matches.find((m) => (m.params as { id?: string }).id);
+  const id = (match?.params as { id?: string })?.id ?? "";
+  return <InvitePage invitationId={id} />;
 }
 
 /** Route definitions shared by all tabs (no layout wrapper). */
@@ -96,6 +104,11 @@ export const appRoutes: RouteObject[] = [
         path: "onboarding",
         element: <OnboardingRoute />,
         handle: { title: "Get Started" },
+      },
+      {
+        path: "invite/:id",
+        element: <InviteRoute />,
+        handle: { title: "Accept Invite" },
       },
       {
         path: "settings",

@@ -593,6 +593,10 @@ export class ApiClient {
     return this.fetch("/api/invitations");
   }
 
+  async getInvitation(invitationId: string): Promise<Invitation> {
+    return this.fetch(`/api/invitations/${invitationId}`);
+  }
+
   async acceptInvitation(invitationId: string): Promise<MemberWithUser> {
     return this.fetch(`/api/invitations/${invitationId}/accept`, {
       method: "POST",

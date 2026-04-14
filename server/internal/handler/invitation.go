@@ -147,8 +147,9 @@ func (h *Handler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
 		if inviter, err := h.Queries.GetUser(r.Context(), requester.UserID); err == nil {
 			inviterName = inviter.Name
 		}
+		invID := uuidToString(inv.ID)
 		go func() {
-			if err := h.EmailService.SendInvitationEmail(email, inviterName, workspaceName); err != nil {
+			if err := h.EmailService.SendInvitationEmail(email, inviterName, workspaceName, invID); err != nil {
 				slog.Warn("failed to send invitation email", "email", email, "error", err)
 			}
 		}()
@@ -222,6 +223,49 @@ func (h *Handler) RevokeInvitation(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---------------------------------------------------------------------------
+// GetMyInvitation — get a single invitation by ID (for the invite accept page).
+// GET /api/invitations/{id}
+// ---------------------------------------------------------------------------
+
+func (h *Handler) GetMyInvitation(w http.ResponseWriter, r *http.Request) {
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+
+	invitationID := chi.URLParam(r, "id")
+	inv, err := h.Queries.GetInvitation(r.Context(), parseUUID(invitationID))
+	if err != nil {
+		writeError(w, http.StatusNotFound, "invitation not found")
+		return
+	}
+
+	// Verify the invitation belongs to the current user.
+	user, err := h.Queries.GetUser(r.Context(), parseUUID(userID))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load user")
+		return
+	}
+	if strings.ToLower(user.Email) != inv.InviteeEmail && uuidToString(inv.InviteeUserID) != userID {
+		writeError(w, http.StatusForbidden, "invitation does not belong to you")
+		return
+	}
+
+	resp := invitationToResponse(inv)
+
+	// Enrich with workspace name and inviter name.
+	if ws, err := h.Queries.GetWorkspace(r.Context(), inv.WorkspaceID); err == nil {
+		resp.WorkspaceName = ws.Name
+	}
+	if inviter, err := h.Queries.GetUser(r.Context(), inv.InviterID); err == nil {
+		resp.InviterName = inviter.Name
+		resp.InviterEmail = inviter.Email
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // ---------------------------------------------------------------------------
