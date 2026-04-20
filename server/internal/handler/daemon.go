@@ -536,10 +536,16 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 		logClaimEndpointSlow(runtimeID, outcome, start, authMs, claimMs, buildMs)
 	}()
 
-	// Verify the caller owns this runtime's workspace.
-	if _, ok := h.requireDaemonRuntimeAccess(w, r, runtimeID); !ok {
+	// Verify the caller owns this runtime's workspace. The runtime's
+	// workspace_id is the authoritative value a claimed task must match
+	// below — a task whose resolved workspace doesn't equal this runtime's
+	// workspace is rejected even if it was enqueued against this
+	// runtime_id (defense-in-depth against upstream routing bugs).
+	runtime, ok := h.requireDaemonRuntimeAccess(w, r, runtimeID)
+	if !ok {
 		return
 	}
+	runtimeWorkspaceID := uuidToString(runtime.WorkspaceID)
 	authMs = time.Since(start).Milliseconds()
 
 	claimStart := time.Now()
@@ -683,6 +689,33 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+	}
+
+	// Workspace isolation check: the daemon uses this response's workspace_id
+	// as the only authority for MULTICA_WORKSPACE_ID in the agent env. An
+	// empty value would make the CLI silently fall back to the user-global
+	// config and talk to whatever workspace the user happened to last
+	// configure; a value that doesn't match the runtime's workspace means
+	// upstream routed a foreign-workspace task here. Both cases must hard-
+	// fail AND cancel the just-dispatched task so the queue / agent status
+	// don't sit stuck until the stale-task sweeper fires minutes later.
+	if resp.WorkspaceID == "" || resp.WorkspaceID != runtimeWorkspaceID {
+		outcome = "error_workspace"
+		slog.Error("task claim: workspace isolation check failed, cancelling task",
+			"task_id", uuidToString(task.ID),
+			"runtime_id", runtimeID,
+			"runtime_workspace", runtimeWorkspaceID,
+			"resolved_workspace", resp.WorkspaceID,
+			"has_issue", task.IssueID.Valid,
+			"has_chat", task.ChatSessionID.Valid,
+			"has_autopilot_run", task.AutopilotRunID.Valid,
+		)
+		if _, cerr := h.TaskService.CancelTask(r.Context(), task.ID); cerr != nil {
+			slog.Error("task claim: cancel after workspace check failed",
+				"task_id", uuidToString(task.ID), "error", cerr)
+		}
+		writeError(w, http.StatusInternalServerError, "task workspace isolation check failed")
+		return
 	}
 
 	slog.Info("task claimed by runtime", "task_id", uuidToString(task.ID), "runtime_id", runtimeID, "agent_id", uuidToString(task.AgentID), "prior_session", resp.PriorSessionID)

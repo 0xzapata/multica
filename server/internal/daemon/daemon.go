@@ -890,6 +890,15 @@ func (d *Daemon) handleTask(ctx context.Context, task Task) {
 }
 
 func (d *Daemon) runTask(ctx context.Context, task Task, provider string, taskLog *slog.Logger) (TaskResult, error) {
+	// Refuse to spawn an agent without a workspace. An empty workspace_id
+	// here would make MULTICA_WORKSPACE_ID empty in the agent env, and the
+	// CLI would otherwise silently fall back to the user-global config — a
+	// path that can leak operations into an unrelated workspace when
+	// multiple workspaces share a host.
+	if task.WorkspaceID == "" {
+		return TaskResult{}, fmt.Errorf("refusing to spawn agent: task has no workspace_id (task_id=%s)", task.ID)
+	}
+
 	entry, ok := d.cfg.Agents[provider]
 	if !ok {
 		return TaskResult{}, fmt.Errorf("no agent configured for provider %q", provider)

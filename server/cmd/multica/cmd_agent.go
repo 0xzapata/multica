@@ -197,10 +197,26 @@ func normalizeAPIBaseURL(raw string) string {
 	return raw
 }
 
+// inAgentExecutionContext reports whether the CLI is being invoked from
+// inside a daemon-managed agent task (daemon sets MULTICA_AGENT_ID and
+// MULTICA_TASK_ID in the agent env). In that context the workspace must be
+// provided explicitly by the daemon — falling back to user-global
+// ~/.multica/config.json would let the agent act on whatever workspace the
+// user last configured, which is how cross-workspace contamination happens
+// when multiple workspaces share a host.
+func inAgentExecutionContext() bool {
+	return os.Getenv("MULTICA_AGENT_ID") != "" || os.Getenv("MULTICA_TASK_ID") != ""
+}
+
 func resolveWorkspaceID(cmd *cobra.Command) string {
 	val := cli.FlagOrEnv(cmd, "workspace-id", "MULTICA_WORKSPACE_ID", "")
 	if val != "" {
 		return val
+	}
+	// Inside an agent task the daemon is the only authority on workspace
+	// identity. Never read the user-global CLI config here.
+	if inAgentExecutionContext() {
+		return ""
 	}
 	profile := resolveProfile(cmd)
 	cfg, _ := cli.LoadCLIConfigForProfile(profile)
@@ -213,6 +229,9 @@ func resolveWorkspaceID(cmd *cobra.Command) string {
 func requireWorkspaceID(cmd *cobra.Command) (string, error) {
 	id := resolveWorkspaceID(cmd)
 	if id == "" {
+		if inAgentExecutionContext() {
+			return "", fmt.Errorf("workspace_id is required: MULTICA_WORKSPACE_ID must be set by the daemon in agent execution context (no fallback to user config)")
+		}
 		return "", fmt.Errorf("workspace_id is required: use --workspace-id flag, set MULTICA_WORKSPACE_ID env, or run 'multica config set workspace_id <id>'")
 	}
 	return id, nil
