@@ -55,32 +55,20 @@ func TestListModelsUnknownProvider(t *testing.T) {
 	}
 }
 
-func TestDefaultModel(t *testing.T) {
-	cases := map[string]string{
-		"claude":   "claude-sonnet-4-6",
-		"codex":    "gpt-5.4",
-		"gemini":   "gemini-2.5-pro",
-		"cursor":   "auto", // cursor is now dynamic; "auto" is the safe static fallback
-		"copilot":  "",     // GitHub-routed, deliberately no opinion
-		"hermes":   "",     // out-of-band config
-		"opencode": "",     // dynamic, no shipped default
-		"openclaw": "",     // pre-registered agents only
-	}
-	for provider, want := range cases {
-		got := DefaultModel(provider)
-		if got != want {
-			t.Errorf("DefaultModel(%q) = %q, want %q", provider, got, want)
-		}
-	}
-}
-
 func TestStaticCatalogsHaveAtMostOneDefault(t *testing.T) {
-	// More than one Default per catalog would make the daemon's
-	// fallback chain ambiguous; ensure we don't accidentally mark
-	// two when adding new models.
-	for _, provider := range []string{"claude", "codex", "gemini", "cursor", "copilot"} {
+	// Each catalog should tag at most one entry as the display
+	// default so the UI badge is unambiguous. More than one
+	// usually means a copy/paste slip when adding new models.
+	catalogs := map[string][]Model{
+		"claude":  claudeStaticModels(),
+		"codex":   codexStaticModels(),
+		"gemini":  geminiStaticModels(),
+		"cursor":  cursorStaticModels(),
+		"copilot": copilotStaticModels(),
+	}
+	for provider, models := range catalogs {
 		count := 0
-		for _, m := range defaultStaticModelsFor(provider) {
+		for _, m := range models {
 			if m.Default {
 				count++
 			}

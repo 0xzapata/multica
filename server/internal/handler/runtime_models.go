@@ -46,11 +46,15 @@ type ModelListRequest struct {
 	UpdatedAt time.Time       `json:"updated_at"`
 }
 
-// ModelEntry mirrors agent.Model for the wire.
+// ModelEntry mirrors agent.Model for the wire. `Default` tags the
+// model the runtime advertises as its preferred pick (e.g. Claude
+// Code's shipped default, or hermes' currentModelId) so the UI can
+// badge it — don't drop it when marshalling.
 type ModelEntry struct {
 	ID       string `json:"id"`
 	Label    string `json:"label"`
 	Provider string `json:"provider,omitempty"`
+	Default  bool   `json:"default,omitempty"`
 }
 
 // ModelListStore is a thread-safe in-memory store. Entries expire after 2 min

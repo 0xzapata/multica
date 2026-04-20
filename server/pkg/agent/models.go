@@ -17,10 +17,13 @@ import (
 // Model describes a single LLM model exposed by an agent provider.
 // The dropdown groups by Provider when the ID uses the
 // `provider/model` form (e.g. "openai/gpt-4o" from opencode).
-// Default marks the model the daemon falls back to when neither the
-// per-agent field nor the MULTICA_<PROVIDER>_MODEL env var is set;
-// the UI surfaces this with a badge so users can see what "leave
-// empty" actually means before saving.
+// Default is a *display* hint: the UI badges the entry the
+// runtime advertises as its preferred pick (e.g. Claude Code's
+// shipped default, or hermes' currentModelId). It has no effect
+// at execution time — when agent.model is empty the daemon passes
+// "" to the backend so each provider's own CLI resolves its own
+// default, which is always closer to what the user's account /
+// environment actually supports than a static guess here.
 type Model struct {
 	ID       string `json:"id"`
 	Label    string `json:"label"`
@@ -95,43 +98,6 @@ func ListModels(ctx context.Context, providerType, executablePath string) ([]Mod
 func ModelSelectionSupported(providerType string) bool {
 	_ = providerType
 	return true
-}
-
-// DefaultModel returns the provider's recommended default model ID,
-// or "" if the provider has no opinionated default (copilot routes
-// through GitHub; openclaw resolves agents at runtime; hermes
-// configures models out-of-band). The daemon falls back to this
-// value when both `agent.model` and MULTICA_<PROVIDER>_MODEL are
-// empty, so the dropdown's "Default (provider)" empty state
-// actually maps to a concrete model at execution time.
-func DefaultModel(providerType string) string {
-	for _, m := range defaultStaticModelsFor(providerType) {
-		if m.Default {
-			return m.ID
-		}
-	}
-	return ""
-}
-
-// defaultStaticModelsFor returns the static catalog for provider
-// types that have one. Used by both ListModels (via the per-provider
-// helpers below) and DefaultModel; centralised so adding a new
-// provider only requires editing one place.
-func defaultStaticModelsFor(providerType string) []Model {
-	switch providerType {
-	case "claude":
-		return claudeStaticModels()
-	case "codex":
-		return codexStaticModels()
-	case "gemini":
-		return geminiStaticModels()
-	case "cursor":
-		return cursorStaticModels()
-	case "copilot":
-		return copilotStaticModels()
-	default:
-		return nil
-	}
 }
 
 // cachedDiscovery invokes fn and caches the result for modelCacheTTL.

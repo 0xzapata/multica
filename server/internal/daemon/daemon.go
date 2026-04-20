@@ -535,13 +535,22 @@ func (d *Daemon) handleModelList(ctx context.Context, rt Runtime, requestID stri
 		return
 	}
 
-	// Wire format matches handler.ModelEntry.
-	wire := make([]map[string]string, 0, len(models))
+	// Wire format matches handler.ModelEntry. Use a struct (not
+	// map[string]string) so the Default bool round-trips — without
+	// it the UI loses its "default" badge on the advertised pick.
+	type modelWire struct {
+		ID       string `json:"id"`
+		Label    string `json:"label"`
+		Provider string `json:"provider,omitempty"`
+		Default  bool   `json:"default,omitempty"`
+	}
+	wire := make([]modelWire, 0, len(models))
 	for _, m := range models {
-		wire = append(wire, map[string]string{
-			"id":       m.ID,
-			"label":    m.Label,
-			"provider": m.Provider,
+		wire = append(wire, modelWire{
+			ID:       m.ID,
+			Label:    m.Label,
+			Provider: m.Provider,
+			Default:  m.Default,
 		})
 	}
 	d.client.ReportModelListResult(ctx, rt.ID, requestID, map[string]any{
@@ -1068,21 +1077,21 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, taskLo
 		customArgs = task.Agent.CustomArgs
 		mcpConfig = task.Agent.McpConfig
 	}
-	// Resolve model with a three-tier fallback so the dropdown's
-	// "Default (provider)" empty state is meaningful at execution
-	// time:
-	//   1. per-agent agent.model (UI dropdown explicit choice)
-	//   2. MULTICA_<PROVIDER>_MODEL env var (operator override)
-	//   3. agent.DefaultModel(provider) (provider's recommended)
+	// Two-tier model resolution: an explicit agent.model wins,
+	// then the daemon-wide MULTICA_<PROVIDER>_MODEL env var. If
+	// both are empty we deliberately pass "" through — each
+	// backend omits `--model` from the CLI invocation, so the
+	// provider picks its own default (Claude Code's shipped
+	// default, codex app-server's account-scoped default, etc.).
+	// Baking a Go-side "recommended default" here is how the
+	// cursor regression happened — static guesses drift from
+	// whatever the upstream CLI actually accepts.
 	model := ""
 	if task.Agent != nil && task.Agent.Model != "" {
 		model = task.Agent.Model
 	}
 	if model == "" {
 		model = entry.Model
-	}
-	if model == "" {
-		model = agent.DefaultModel(provider)
 	}
 	execOpts := agent.ExecOptions{
 		Cwd:             env.WorkDir,

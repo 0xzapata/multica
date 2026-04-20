@@ -92,8 +92,8 @@ func (b *hermesBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 	promptDone := make(chan hermesPromptResult, 1)
 
 	c := &hermesClient{
-		cfg:   b.cfg,
-		stdin: stdin,
+		cfg:     b.cfg,
+		stdin:   stdin,
 		pending: make(map[int]*pendingRPC),
 		onMessage: func(msg Message) {
 			if msg.Type == MessageText {
@@ -204,18 +204,27 @@ func (b *hermesBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 		// UI dropdown), ask hermes to switch the session to it
 		// before we send any prompt. Hermes' _build_model_state
 		// exposes modelId as `provider:model` — we pass that
-		// through verbatim. A failure here is logged but not
-		// fatal: the session is still usable on hermes' default
-		// model, which beats aborting the task outright.
+		// through verbatim. This MUST fail the task on error:
+		// if we silently fell back to hermes' default model the
+		// user would think their pick was honoured while the
+		// task actually ran on something else.
 		if opts.Model != "" {
 			if _, err := c.request(runCtx, "session/set_model", map[string]any{
 				"sessionId": sessionID,
 				"modelId":   opts.Model,
 			}); err != nil {
-				b.cfg.Logger.Warn("hermes set_session_model failed; continuing with default", "error", err, "requested_model", opts.Model)
-			} else {
-				b.cfg.Logger.Info("hermes session model set", "model", opts.Model)
+				b.cfg.Logger.Warn("hermes set_session_model failed", "error", err, "requested_model", opts.Model)
+				finalStatus = "failed"
+				finalError = fmt.Sprintf("hermes could not switch to model %q: %v", opts.Model, err)
+				resCh <- Result{
+					Status:     finalStatus,
+					Error:      finalError,
+					DurationMs: time.Since(startTime).Milliseconds(),
+					SessionID:  sessionID,
+				}
+				return
 			}
+			b.cfg.Logger.Info("hermes session model set", "model", opts.Model)
 		}
 
 		// 4. Build the prompt content. If we have a system prompt, prepend it.
@@ -325,13 +334,13 @@ type hermesPromptResult struct {
 }
 
 type hermesClient struct {
-	cfg       Config
-	stdin     interface{ Write([]byte) (int, error) }
-	mu        sync.Mutex
-	nextID    int
-	pending   map[int]*pendingRPC
-	sessionID string
-	onMessage func(Message)
+	cfg          Config
+	stdin        interface{ Write([]byte) (int, error) }
+	mu           sync.Mutex
+	nextID       int
+	pending      map[int]*pendingRPC
+	sessionID    string
+	onMessage    func(Message)
 	onPromptDone func(hermesPromptResult)
 
 	usageMu sync.Mutex
@@ -469,8 +478,8 @@ func (c *hermesClient) extractPromptResult(data json.RawMessage) {
 	}
 	if resp.Usage != nil {
 		pr.usage = TokenUsage{
-			InputTokens:  resp.Usage.InputTokens,
-			OutputTokens: resp.Usage.OutputTokens,
+			InputTokens:     resp.Usage.InputTokens,
+			OutputTokens:    resp.Usage.OutputTokens,
 			CacheReadTokens: resp.Usage.CachedReadTokens,
 		}
 	}
@@ -551,9 +560,9 @@ func (c *hermesClient) handleAgentThought(data json.RawMessage) {
 
 func (c *hermesClient) handleToolCallStart(data json.RawMessage) {
 	var msg struct {
-		ToolCallID string `json:"toolCallId"`
-		Title      string `json:"title"`
-		Kind       string `json:"kind"`
+		ToolCallID string         `json:"toolCallId"`
+		Title      string         `json:"title"`
+		Kind       string         `json:"kind"`
 		RawInput   map[string]any `json:"rawInput"`
 	}
 	if err := json.Unmarshal(data, &msg); err != nil {
@@ -704,8 +713,8 @@ func hermesToolNameFromTitle(title string, kind string) string {
 // failure instead of a generic "empty output".
 type hermesProviderErrorSniffer struct {
 	mu      sync.Mutex
-	remains []byte       // buffer for a partial trailing line across writes
-	lines   []string     // captured error lines, bounded
+	remains []byte   // buffer for a partial trailing line across writes
+	lines   []string // captured error lines, bounded
 	seen    map[string]bool
 }
 
