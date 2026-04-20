@@ -53,6 +53,7 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Info("connected to database")
+	logPoolConfig(pool)
 
 	bus := events.New()
 	hub := realtime.NewHub()
@@ -84,6 +85,7 @@ func main() {
 	// Start background sweeper to mark stale runtimes as offline.
 	go runRuntimeSweeper(sweepCtx, queries, bus)
 	go runAutopilotScheduler(autopilotCtx, queries, autopilotSvc)
+	go runDBStatsLogger(sweepCtx, pool)
 
 	// Graceful shutdown
 	go func() {
