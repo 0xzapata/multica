@@ -283,6 +283,22 @@ export const en: LandingDict = {
     },
     entries: [
       {
+        version: "0.2.8",
+        date: "2026-04-20",
+        title: "Per-Agent Models, Kimi Runtime & Self-Host Auth",
+        changes: [],
+        features: [
+          "Per-agent `model` field with a provider-aware dropdown — pick the LLM model for each agent from the UI or via `multica agent create/update --model`, with live discovery from each runtime's CLI",
+          "Kimi CLI as a new agent runtime (Moonshot AI's `kimi-cli` over ACP), with model selection, auto-approved tool permissions, and streaming tool-call rendering",
+          "Expand toggle on inline comment and reply editors for composing long text",
+        ],
+        fixes: [
+          "Posting the result comment is now an explicit, numbered step in agent workflows so final replies reach the issue instead of terminal output",
+          "Agent live status card no longer leaks across issues when switching via Cmd+K",
+          "Self-hosted session cookies honor the `FRONTEND_ORIGIN` scheme — plain-HTTP deployments stop silently dropping cookies, and `COOKIE_DOMAIN=<ip>` now falls back to host-only with a warning instead of breaking login",
+        ],
+      },
+      {
         version: "0.2.7",
         date: "2026-04-18",
         title: "Sub-Issues from Editor, Self-Host Gating & MCP",

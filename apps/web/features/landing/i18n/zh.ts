@@ -283,6 +283,22 @@ export const zh: LandingDict = {
     },
     entries: [
       {
+        version: "0.2.8",
+        date: "2026-04-20",
+        title: "Agent 模型选择、Kimi Runtime 与自部署登录",
+        changes: [],
+        features: [
+          "Agent 新增 `model` 字段及按 Provider 聚合的模型下拉框——可在界面或通过 `multica agent create/update --model` 为每个 Agent 选择 LLM 模型，并从各 Runtime CLI 实时发现可用模型",
+          "新增 Kimi CLI Agent Runtime（Moonshot AI 的 `kimi-cli`，基于 ACP），支持模型选择、自动授权工具权限以及流式工具调用渲染",
+          "评论和回复编辑器新增放大按钮，便于撰写长文本",
+        ],
+        fixes: [
+          "Agent 工作流将“发布结果评论”提升为独立的显式步骤，确保最终回复送达 Issue 而不是只留在终端输出",
+          "通过 Cmd+K 切换 Issue 时不再出现其他 Issue 的 Agent 实时状态残留",
+          "自部署会话 Cookie 的 Secure 标志改由 `FRONTEND_ORIGIN` 协议决定——HTTP 部署不再因浏览器丢弃 Cookie 导致登录失败；`COOKIE_DOMAIN=<ip>` 会自动回退到 host-only 并输出警告",
+        ],
+      },
+      {
         version: "0.2.7",
         date: "2026-04-18",
         title: "编辑器创建子 Issue、自部署门禁与 MCP",
