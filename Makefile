@@ -65,7 +65,14 @@ selfhost: ## Create .env if needed, then pull and start the official self-hosted
 		echo "==> Generated random JWT_SECRET"; \
 	fi
 	@echo "==> Pulling official Multica images..."
-	docker compose -f docker-compose.selfhost.yml pull
+	@if ! docker compose -f docker-compose.selfhost.yml pull; then \
+		echo ""; \
+		echo "Official images for tag '$${MULTICA_IMAGE_TAG:-latest}' are not published yet."; \
+		echo "If this is before the first GHCR release, either:"; \
+		echo "  - build from the current checkout: make selfhost-build"; \
+		echo "  - or follow main explicitly: set MULTICA_IMAGE_TAG=edge in .env"; \
+		exit 1; \
+	fi
 	@echo "==> Starting Multica via Docker Compose..."
 	docker compose -f docker-compose.selfhost.yml up -d
 	@echo "==> Waiting for backend to be ready..."
@@ -127,6 +134,7 @@ selfhost-build: ## Build backend/web from the current checkout and start the sel
 		echo "        or set APP_ENV=development in .env (private networks only) to enable code 888888."; \
 		echo ""; \
 		echo "Built images locally via docker-compose.selfhost.build.yml."; \
+		echo "Local tags: multica-backend:dev and multica-web:dev."; \
 		echo ""; \
 		echo "Next — install the CLI and connect your machine:"; \
 		echo "  brew install multica-ai/tap/multica"; \

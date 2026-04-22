@@ -74,6 +74,21 @@ function Checkout-ServerRef {
     git checkout --force $Ref 2>$null
 }
 
+function Pull-OfficialSelfHostImages {
+    docker compose -f docker-compose.selfhost.yml pull
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    Write-Host ""
+    Write-Warn "Official images for the selected self-host channel are not published yet."
+    Write-Host "This can happen before the first GHCR release is available."
+    Write-Host "From $InstallDir, you can either:"
+    Write-Host "  docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.build.yml up -d --build"
+    Write-Host "  # or set MULTICA_IMAGE_TAG=edge in .env and rerun docker compose"
+    exit 1
+}
+
 # ---------------------------------------------------------------------------
 # CLI Installation
 # ---------------------------------------------------------------------------
@@ -274,7 +289,7 @@ function Install-Server {
     }
 
     Write-Info "Pulling official Multica images..."
-    docker compose -f docker-compose.selfhost.yml pull
+    Pull-OfficialSelfHostImages
     Write-Info "Starting Multica services (this may take a few minutes on first run)..."
     docker compose -f docker-compose.selfhost.yml up -d
 

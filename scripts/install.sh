@@ -176,6 +176,20 @@ checkout_server_ref() {
   git checkout --force "$ref" 2>/dev/null || true
 }
 
+pull_official_selfhost_images() {
+  if docker compose -f docker-compose.selfhost.yml pull; then
+    return
+  fi
+
+  echo ""
+  warn "Official images for the selected self-host channel are not published yet."
+  echo "This can happen before the first GHCR release is available."
+  echo "From $INSTALL_DIR, you can either:"
+  echo "  docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.build.yml up -d --build"
+  echo "  # or set MULTICA_IMAGE_TAG=edge in .env and rerun docker compose"
+  exit 1
+}
+
 upgrade_cli_brew() {
   info "Upgrading Multica CLI via Homebrew..."
   brew update 2>/dev/null || true
@@ -301,7 +315,7 @@ setup_server() {
 
   # Start Docker Compose
   info "Pulling official Multica images..."
-  docker compose -f docker-compose.selfhost.yml pull
+  pull_official_selfhost_images
   info "Starting Multica services (this may take a few minutes on first run)..."
   docker compose -f docker-compose.selfhost.yml up -d
 

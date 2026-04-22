@@ -4,6 +4,25 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "server/**"
+      - "apps/web/**"
+      - "packages/**"
+      - "Dockerfile"
+      - "Dockerfile.web"
+      - ".dockerignore"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - "tsconfig.json"
+      - "docker-compose.selfhost.yml"
+      - "docker-compose.selfhost.build.yml"
+      - ".github/workflows/docker-edge.yml"
+
+concurrency:
+  group: docker-edge-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

@@ -63,6 +63,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -75,6 +81,9 @@ jobs:
   docker-images:
     needs: verify
     runs-on: ubuntu-latest
+    concurrency:
+      group: release-docker-images-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -160,7 +169,7 @@ jobs:
   # can be signed + notarized with Apple Developer credentials that are
   # not (yet) wired into CI.
   desktop:
-    needs: [release, docker-images]
+    needs: release
     strategy:
       fail-fast: false
       matrix:

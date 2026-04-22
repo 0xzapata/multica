@@ -42,6 +42,18 @@ Multica uses email-based magic link authentication via [Resend](https://resend.c
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
 | `GOOGLE_REDIRECT_URI` | OAuth callback URL (e.g. `https://app.example.com/auth/callback`) |
 
+Changes take effect after restarting the backend / compose stack. The web UI reads `GOOGLE_CLIENT_ID` from `/api/config` at runtime, so no web rebuild is needed.
+
+### Signup Controls (Optional)
+
+| Variable | Description |
+|----------|-------------|
+| `ALLOW_SIGNUP` | Set to `false` to disable new user signups on a private instance |
+| `ALLOWED_EMAIL_DOMAINS` | Optional comma-separated allowlist of email domains |
+| `ALLOWED_EMAILS` | Optional comma-separated allowlist of exact email addresses |
+
+Changes take effect after restarting the backend / compose stack. The web UI reads `ALLOW_SIGNUP` from `/api/config` at runtime, so no web rebuild is needed.
+
 ### File Storage (Optional)
 
 For file uploads and attachments, configure S3 and CloudFront:
@@ -279,3 +291,4 @@ docker compose -f docker-compose.selfhost.yml up -d
 ```
 
 Set `MULTICA_IMAGE_TAG=edge` in `.env` to follow the `main` channel, or pin to an exact release like `v0.2.4`. Migrations run automatically on backend startup. They are idempotent — running them multiple times has no effect.
+If the selected GHCR tag has not been published yet, fall back to `docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.build.yml up -d --build` or temporarily set `MULTICA_IMAGE_TAG=edge`.
