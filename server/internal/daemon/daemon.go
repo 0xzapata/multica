@@ -587,14 +587,14 @@ func (d *Daemon) handleLocalSkillList(ctx context.Context, rt Runtime, requestID
 
 	skills, supported, err := listRuntimeLocalSkills(rt.Provider)
 	if err != nil {
-		d.client.ReportLocalSkillListResult(ctx, rt.ID, requestID, map[string]any{
+		d.reportLocalSkillListResult(ctx, rt, requestID, map[string]any{
 			"status": "failed",
 			"error":  err.Error(),
 		})
 		return
 	}
 
-	d.client.ReportLocalSkillListResult(ctx, rt.ID, requestID, map[string]any{
+	d.reportLocalSkillListResult(ctx, rt, requestID, map[string]any{
 		"status":    "completed",
 		"skills":    skills,
 		"supported": supported,
@@ -606,24 +606,102 @@ func (d *Daemon) handleLocalSkillImport(ctx context.Context, rt Runtime, pending
 
 	skill, supported, err := loadRuntimeLocalSkillBundle(rt.Provider, pending.SkillKey)
 	if err != nil {
-		d.client.ReportLocalSkillImportResult(ctx, rt.ID, pending.ID, map[string]any{
+		d.reportLocalSkillImportResult(ctx, rt, pending.ID, map[string]any{
 			"status": "failed",
 			"error":  err.Error(),
 		})
 		return
 	}
 	if !supported {
-		d.client.ReportLocalSkillImportResult(ctx, rt.ID, pending.ID, map[string]any{
+		d.reportLocalSkillImportResult(ctx, rt, pending.ID, map[string]any{
 			"status": "failed",
 			"error":  fmt.Sprintf("provider %q does not expose runtime local skills", rt.Provider),
 		})
 		return
 	}
 
-	d.client.ReportLocalSkillImportResult(ctx, rt.ID, pending.ID, map[string]any{
+	d.reportLocalSkillImportResult(ctx, rt, pending.ID, map[string]any{
 		"status": "completed",
 		"skill":  skill,
 	})
+}
+
+// localSkillReportBackoffs defines the retry schedule for delivering a
+// local-skill result to the server. First attempt runs immediately, then we
+// back off. The sum (≈6.5s) stays well under the server-side running timeout
+// (60s) so a report that eventually lands still updates the request instead
+// of racing a timeout transition.
+//
+// Overridable for tests to avoid real sleeps.
+var localSkillReportBackoffs = []time.Duration{0, 500 * time.Millisecond, 2 * time.Second, 4 * time.Second}
+
+// reportLocalSkillListResult delivers a list-report to the server with retry
+// on transient failures. See reportLocalSkillResultWithRetry for semantics.
+func (d *Daemon) reportLocalSkillListResult(ctx context.Context, rt Runtime, requestID string, payload map[string]any) {
+	d.reportLocalSkillResultWithRetry(ctx, "list", rt.ID, requestID, func(ctx context.Context) error {
+		return d.client.ReportLocalSkillListResult(ctx, rt.ID, requestID, payload)
+	})
+}
+
+// reportLocalSkillImportResult delivers an import-report to the server with
+// retry on transient failures.
+func (d *Daemon) reportLocalSkillImportResult(ctx context.Context, rt Runtime, requestID string, payload map[string]any) {
+	d.reportLocalSkillResultWithRetry(ctx, "import", rt.ID, requestID, func(ctx context.Context) error {
+		return d.client.ReportLocalSkillImportResult(ctx, rt.ID, requestID, payload)
+	})
+}
+
+// reportLocalSkillResultWithRetry retries `fn` on 5xx / network errors and
+// stops on success, 4xx, or after exhausting localSkillReportBackoffs.
+//
+// Why this exists: the server persists the report through a Redis / DB
+// write; on a transient store failure it now correctly returns 500 (see
+// PR #1557). Without a client-side retry the daemon would fire once,
+// swallow the error, and the pending request stays in "running" on the
+// server until the 60s timeout — which is exactly the "daemon did not
+// respond" failure mode the whole store refactor was meant to fix. 4xx is
+// treated as permanent (request-not-found, cross-workspace token rejected,
+// bad body) — retrying those just wastes heartbeat cycles.
+func (d *Daemon) reportLocalSkillResultWithRetry(ctx context.Context, kind, runtimeID, requestID string, fn func(context.Context) error) {
+	var lastErr error
+	for attempt, wait := range localSkillReportBackoffs {
+		if wait > 0 {
+			select {
+			case <-ctx.Done():
+				d.logger.Error("local skill report cancelled",
+					"kind", kind, "runtime_id", runtimeID, "request_id", requestID,
+					"attempt", attempt, "error", ctx.Err())
+				return
+			case <-time.After(wait):
+			}
+		}
+		err := fn(ctx)
+		if err == nil {
+			if attempt > 0 {
+				d.logger.Info("local skill report succeeded after retry",
+					"kind", kind, "runtime_id", runtimeID, "request_id", requestID,
+					"attempt", attempt+1)
+			}
+			return
+		}
+		lastErr = err
+
+		// 4xx is permanent (request expired, workspace mismatch, malformed
+		// body). No amount of retrying will make it succeed.
+		var reqErr *requestError
+		if errors.As(err, &reqErr) && reqErr.StatusCode >= 400 && reqErr.StatusCode < 500 {
+			d.logger.Error("local skill report rejected — not retrying",
+				"kind", kind, "runtime_id", runtimeID, "request_id", requestID,
+				"status", reqErr.StatusCode, "error", err)
+			return
+		}
+
+		d.logger.Warn("local skill report failed — will retry",
+			"kind", kind, "runtime_id", runtimeID, "request_id", requestID,
+			"attempt", attempt+1, "error", err)
+	}
+	d.logger.Error("local skill report exhausted retries",
+		"kind", kind, "runtime_id", runtimeID, "request_id", requestID, "error", lastErr)
 }
 
 // handleUpdate performs the CLI update when triggered by the server via heartbeat.
