@@ -16,7 +16,7 @@ import (
 
 const readinessQuery = `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = $1)`
 
-const readinessCacheTTL = 2 * time.Second
+const readinessCacheTTL = 3 * time.Second
 
 type readinessDB interface {
 	Ping(ctx context.Context) error
