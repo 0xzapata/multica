@@ -104,19 +104,19 @@ export function useAttachLabel(issueId: string) {
     onMutate: async (labelId) => {
       await qc.cancelQueries({ queryKey: labelKeys.byIssue(wsId, issueId) });
       const prev = qc.getQueryData<IssueLabelsResponse>(labelKeys.byIssue(wsId, issueId));
-      // Resolve the full label from the workspace list cache so the chip
-      // can render immediately with the right name + color. If it isn't
-      // cached we skip the optimistic patch and rely on onSettled refetch.
+      // Only patch when we already know the current label set — otherwise
+      // appending `[label]` to an empty array would wipe denormalized
+      // labels in issue list/detail caches and rollback couldn't restore
+      // them. If byIssue isn't cached yet (user clicked before the picker
+      // fetched), skip the optimistic patch and rely on onSettled refetch.
+      if (!prev) return { prev };
+      if (prev.labels.some((l) => l.id === labelId)) return { prev };
       const list = qc.getQueryData<ListLabelsResponse>(labelKeys.list(wsId));
       const label = list?.labels.find((l) => l.id === labelId);
-      if (label && !prev?.labels.some((l) => l.id === labelId)) {
-        const next: IssueLabelsResponse = {
-          ...prev,
-          labels: [...(prev?.labels ?? []), label],
-        };
-        qc.setQueryData<IssueLabelsResponse>(labelKeys.byIssue(wsId, issueId), next);
-        onIssueLabelsChanged(qc, wsId, issueId, next.labels);
-      }
+      if (!label) return { prev };
+      const next: IssueLabelsResponse = { ...prev, labels: [...prev.labels, label] };
+      qc.setQueryData<IssueLabelsResponse>(labelKeys.byIssue(wsId, issueId), next);
+      onIssueLabelsChanged(qc, wsId, issueId, next.labels);
       return { prev };
     },
     onError: (_err, _id, ctx) => {
