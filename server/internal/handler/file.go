@@ -314,9 +314,18 @@ func (h *Handler) DeleteAttachment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	attUUID, ok := parseUUIDOrBadRequest(w, attachmentID, "attachment id")
+	if !ok {
+		return
+	}
+	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace id")
+	if !ok {
+		return
+	}
+
 	att, err := h.Queries.GetAttachment(r.Context(), db.GetAttachmentParams{
-		ID:          parseUUID(attachmentID),
-		WorkspaceID: parseUUID(workspaceID),
+		ID:          attUUID,
+		WorkspaceID: wsUUID,
 	})
 	if err != nil {
 		writeError(w, http.StatusNotFound, "attachment not found")

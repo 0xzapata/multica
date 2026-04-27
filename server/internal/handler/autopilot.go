@@ -361,9 +361,18 @@ func (h *Handler) DeleteAutopilot(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	workspaceID := h.resolveWorkspaceID(r)
 
+	idUUID, ok := parseUUIDOrBadRequest(w, id, "autopilot id")
+	if !ok {
+		return
+	}
+	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace id")
+	if !ok {
+		return
+	}
+
 	if _, err := h.Queries.GetAutopilotInWorkspace(r.Context(), db.GetAutopilotInWorkspaceParams{
-		ID:          parseUUID(id),
-		WorkspaceID: parseUUID(workspaceID),
+		ID:          idUUID,
+		WorkspaceID: wsUUID,
 	}); err != nil {
 		writeError(w, http.StatusNotFound, "autopilot not found")
 		return
@@ -374,12 +383,12 @@ func (h *Handler) DeleteAutopilot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Queries.DeleteAutopilot(r.Context(), parseUUID(id)); err != nil {
+	if err := h.Queries.DeleteAutopilot(r.Context(), idUUID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete autopilot")
 		return
 	}
 
-	h.publish(protocol.EventAutopilotDeleted, workspaceID, "member", userID, map[string]any{"autopilot_id": id})
+	h.publish(protocol.EventAutopilotDeleted, workspaceID, "member", userID, map[string]any{"autopilot_id": uuidToString(idUUID)})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -553,16 +562,29 @@ func (h *Handler) DeleteAutopilotTrigger(w http.ResponseWriter, r *http.Request)
 	triggerID := chi.URLParam(r, "triggerId")
 	workspaceID := h.resolveWorkspaceID(r)
 
+	autopilotUUID, ok := parseUUIDOrBadRequest(w, autopilotID, "autopilot id")
+	if !ok {
+		return
+	}
+	triggerUUID, ok := parseUUIDOrBadRequest(w, triggerID, "trigger id")
+	if !ok {
+		return
+	}
+	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace id")
+	if !ok {
+		return
+	}
+
 	if _, err := h.Queries.GetAutopilotInWorkspace(r.Context(), db.GetAutopilotInWorkspaceParams{
-		ID:          parseUUID(autopilotID),
-		WorkspaceID: parseUUID(workspaceID),
+		ID:          autopilotUUID,
+		WorkspaceID: wsUUID,
 	}); err != nil {
 		writeError(w, http.StatusNotFound, "autopilot not found")
 		return
 	}
 
-	trigger, err := h.Queries.GetAutopilotTrigger(r.Context(), parseUUID(triggerID))
-	if err != nil || uuidToString(trigger.AutopilotID) != autopilotID {
+	trigger, err := h.Queries.GetAutopilotTrigger(r.Context(), triggerUUID)
+	if err != nil || uuidToString(trigger.AutopilotID) != uuidToString(autopilotUUID) {
 		writeError(w, http.StatusNotFound, "trigger not found")
 		return
 	}
@@ -572,14 +594,14 @@ func (h *Handler) DeleteAutopilotTrigger(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := h.Queries.DeleteAutopilotTrigger(r.Context(), parseUUID(triggerID)); err != nil {
+	if err := h.Queries.DeleteAutopilotTrigger(r.Context(), triggerUUID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete trigger")
 		return
 	}
 
 	h.publish(protocol.EventAutopilotUpdated, workspaceID, "member", userID, map[string]any{
-		"autopilot_id": autopilotID,
-		"trigger_id":   triggerID,
+		"autopilot_id": uuidToString(autopilotUUID),
+		"trigger_id":   uuidToString(triggerUUID),
 	})
 	w.WriteHeader(http.StatusNoContent)
 }

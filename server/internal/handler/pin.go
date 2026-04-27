@@ -151,11 +151,20 @@ func (h *Handler) DeletePin(w http.ResponseWriter, r *http.Request) {
 	itemType := chi.URLParam(r, "itemType")
 	itemID := chi.URLParam(r, "itemId")
 
+	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace id")
+	if !ok {
+		return
+	}
+	itemUUID, ok := parseUUIDOrBadRequest(w, itemID, "item id")
+	if !ok {
+		return
+	}
+
 	err := h.Queries.DeletePinnedItem(r.Context(), db.DeletePinnedItemParams{
-		WorkspaceID: parseUUID(workspaceID),
+		WorkspaceID: wsUUID,
 		UserID:      parseUUID(userID),
 		ItemType:    itemType,
-		ItemID:      parseUUID(itemID),
+		ItemID:      itemUUID,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete pin")
@@ -182,11 +191,20 @@ func (h *Handler) ReorderPins(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace id")
+	if !ok {
+		return
+	}
+
 	for _, item := range req.Items {
+		itemUUID, ok := parseUUIDOrBadRequest(w, item.ID, "items[].id")
+		if !ok {
+			return
+		}
 		if err := h.Queries.UpdatePinnedItemPosition(r.Context(), db.UpdatePinnedItemPositionParams{
 			Position:    item.Position,
-			ID:          parseUUID(item.ID),
-			WorkspaceID: parseUUID(workspaceID),
+			ID:          itemUUID,
+			WorkspaceID: wsUUID,
 			UserID:      parseUUID(userID),
 		}); err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to reorder pins")

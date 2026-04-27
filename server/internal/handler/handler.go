@@ -108,8 +108,19 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
-// Thin wrappers around util functions (preserve existing handler code unchanged).
-func parseUUID(s string) pgtype.UUID                { return util.ParseUUID(s) }
+// Thin wrappers around util functions.
+//
+// parseUUID is intentionally the panicking variant: any handler call site
+// reachable here is expected to feed a UUID that is either (a) a sqlc round-trip
+// of a DB-sourced value, or (b) a raw request input that has already been
+// validated upstream. A panic here means an unguarded user-input string slipped
+// in — that is a real bug we want surfaced loudly (chi's middleware.Recoverer
+// converts it to a 500) instead of silently corrupting data via a zero UUID.
+//
+// For unvalidated user input at request boundaries, use parseUUIDOrBadRequest
+// (writes 400) — never feed raw chi.URLParam / request-body strings into
+// parseUUID directly when the call writes to the database.
+func parseUUID(s string) pgtype.UUID                { return util.MustParseUUID(s) }
 func uuidToString(u pgtype.UUID) string             { return util.UUIDToString(u) }
 func textToPtr(t pgtype.Text) *string               { return util.TextToPtr(t) }
 func ptrToText(s *string) pgtype.Text               { return util.PtrToText(s) }
@@ -117,6 +128,22 @@ func strToText(s string) pgtype.Text                { return util.StrToText(s) }
 func timestampToString(t pgtype.Timestamptz) string { return util.TimestampToString(t) }
 func timestampToPtr(t pgtype.Timestamptz) *string   { return util.TimestampToPtr(t) }
 func uuidToPtr(u pgtype.UUID) *string               { return util.UUIDToPtr(u) }
+
+// parseUUIDOrBadRequest validates a UUID string sourced from user input
+// (URL params, request body, headers). On invalid input it writes a 400
+// response and returns ok=false; callers must return immediately.
+//
+// Use this anywhere a malformed UUID would otherwise reach a write query
+// (DELETE / UPDATE) — the silent zero-UUID behavior of the old ParseUUID
+// caused real silent-data-loss bugs (#1661).
+func parseUUIDOrBadRequest(w http.ResponseWriter, s, fieldName string) (pgtype.UUID, bool) {
+	u, err := util.ParseUUID(s)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid "+fieldName)
+		return pgtype.UUID{}, false
+	}
+	return u, true
+}
 
 // publish sends a domain event through the event bus.
 func (h *Handler) publish(eventType, workspaceID, actorType, actorID string, payload any) {
@@ -265,9 +292,17 @@ func countOwners(members []db.Member) int {
 }
 
 func (h *Handler) getWorkspaceMember(ctx context.Context, userID, workspaceID string) (db.Member, error) {
+	userUUID, err := util.ParseUUID(userID)
+	if err != nil {
+		return db.Member{}, err
+	}
+	wsUUID, err := util.ParseUUID(workspaceID)
+	if err != nil {
+		return db.Member{}, err
+	}
 	return h.Queries.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{
-		UserID:      parseUUID(userID),
-		WorkspaceID: parseUUID(workspaceID),
+		UserID:      userUUID,
+		WorkspaceID: wsUUID,
 	})
 }
 
@@ -332,14 +367,28 @@ func (h *Handler) loadIssueForUser(w http.ResponseWriter, r *http.Request, issue
 		return db.Issue{}, false
 	}
 
-	// Try identifier format first (e.g., "JIA-42").
+	// Try identifier format first (e.g., "JIA-42"). resolveIssueByIdentifier
+	// silently returns false for non-identifier strings, falling through to
+	// the UUID path below.
 	if issue, ok := h.resolveIssueByIdentifier(r.Context(), issueID, workspaceID); ok {
 		return issue, true
 	}
 
+	issueUUID, err := util.ParseUUID(issueID)
+	if err != nil {
+		// Not a valid UUID and didn't match identifier format → 404 (consistent
+		// with previous silent-zero behavior, which would also have produced 404).
+		writeError(w, http.StatusNotFound, "issue not found")
+		return db.Issue{}, false
+	}
+	wsUUID, err := util.ParseUUID(workspaceID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid workspace_id")
+		return db.Issue{}, false
+	}
 	issue, err := h.Queries.GetIssueInWorkspace(r.Context(), db.GetIssueInWorkspaceParams{
-		ID:          parseUUID(issueID),
-		WorkspaceID: parseUUID(workspaceID),
+		ID:          issueUUID,
+		WorkspaceID: wsUUID,
 	})
 	if err != nil {
 		writeError(w, http.StatusNotFound, "issue not found")
@@ -357,8 +406,12 @@ func (h *Handler) resolveIssueByIdentifier(ctx context.Context, id, workspaceID 
 	if workspaceID == "" {
 		return db.Issue{}, false
 	}
+	wsUUID, err := util.ParseUUID(workspaceID)
+	if err != nil {
+		return db.Issue{}, false
+	}
 	issue, err := h.Queries.GetIssueByNumber(ctx, db.GetIssueByNumberParams{
-		WorkspaceID: parseUUID(workspaceID),
+		WorkspaceID: wsUUID,
 		Number:      parts.number,
 	})
 	if err != nil {

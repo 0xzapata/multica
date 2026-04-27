@@ -330,6 +330,66 @@ func TestIssueCRUD(t *testing.T) {
 	}
 }
 
+// TestDeleteIssueByIdentifier guards against #1661 — DELETE /api/issues/{id}
+// must actually delete the row when the path segment is a human-readable
+// identifier ("HAN-42") rather than a UUID. Before the PR #1680 + MUL-1410
+// refactor, parseUUID(rawString) silently produced a zero UUID, the SQL
+// DELETE matched nothing, and the handler still returned 204.
+func TestDeleteIssueByIdentifier(t *testing.T) {
+	w := httptest.NewRecorder()
+	req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
+		"title":    "Issue to delete by identifier",
+		"status":   "todo",
+		"priority": "medium",
+	})
+	testHandler.CreateIssue(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("CreateIssue: expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	var created IssueResponse
+	json.NewDecoder(w.Body).Decode(&created)
+	if created.Identifier == "" {
+		t.Fatalf("CreateIssue: expected identifier to be populated, got empty")
+	}
+
+	// Delete using the human-readable identifier (e.g. "HAN-1") rather than the UUID.
+	w = httptest.NewRecorder()
+	req = newRequest("DELETE", "/api/issues/"+created.Identifier, nil)
+	req = withURLParam(req, "id", created.Identifier)
+	testHandler.DeleteIssue(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("DeleteIssue by identifier: expected 204, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify the row is actually gone — the silent-data-loss bug would have
+	// returned 204 here too, but the row would still exist.
+	var count int
+	if err := testPool.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM issue WHERE id = $1`, created.ID,
+	).Scan(&count); err != nil {
+		t.Fatalf("count query: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("DeleteIssue by identifier returned 204 but row still exists (count=%d) — silent-data-loss regression", count)
+	}
+}
+
+// TestDeleteIssueRejectsInvalidUUID verifies that a path segment that is
+// neither a valid UUID nor a valid identifier returns 404 (not 204) — the
+// handler must never silently succeed on malformed input.
+func TestDeleteIssueRejectsInvalidUUID(t *testing.T) {
+	w := httptest.NewRecorder()
+	req := newRequest("DELETE", "/api/issues/not-a-uuid-or-identifier", nil)
+	req = withURLParam(req, "id", "not-a-uuid-or-identifier")
+	testHandler.DeleteIssue(w, req)
+	if w.Code == http.StatusNoContent {
+		t.Fatalf("DeleteIssue with invalid id: must not return 204; got %d", w.Code)
+	}
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("DeleteIssue with invalid id: expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 // TestCreateIssueDefaultStatusIsTodo verifies that issues created without an
 // explicit status default to "todo" so the daemon picks them up immediately.
 // Before this fix the default was "backlog", which daemons ignore.

@@ -52,7 +52,11 @@ func (h *Handler) requireDaemonWorkspaceAccess(w http.ResponseWriter, r *http.Re
 
 // requireDaemonRuntimeAccess looks up a runtime and verifies the caller owns its workspace.
 func (h *Handler) requireDaemonRuntimeAccess(w http.ResponseWriter, r *http.Request, runtimeID string) (db.AgentRuntime, bool) {
-	rt, err := h.Queries.GetAgentRuntime(r.Context(), parseUUID(runtimeID))
+	runtimeUUID, ok := parseUUIDOrBadRequest(w, runtimeID, "runtime_id")
+	if !ok {
+		return db.AgentRuntime{}, false
+	}
+	rt, err := h.Queries.GetAgentRuntime(r.Context(), runtimeUUID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "runtime not found")
 		return db.AgentRuntime{}, false
@@ -65,7 +69,11 @@ func (h *Handler) requireDaemonRuntimeAccess(w http.ResponseWriter, r *http.Requ
 
 // requireDaemonTaskAccess looks up a task and verifies the caller owns its workspace.
 func (h *Handler) requireDaemonTaskAccess(w http.ResponseWriter, r *http.Request, taskID string) (db.AgentTaskQueue, bool) {
-	task, err := h.Queries.GetAgentTask(r.Context(), parseUUID(taskID))
+	taskUUID, ok := parseUUIDOrBadRequest(w, taskID, "task_id")
+	if !ok {
+		return db.AgentTaskQueue{}, false
+	}
+	task, err := h.Queries.GetAgentTask(r.Context(), taskUUID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "task not found")
 		return db.AgentTaskQueue{}, false
@@ -524,13 +532,14 @@ func (h *Handler) DaemonHeartbeat(w http.ResponseWriter, r *http.Request) {
 	runtimeID = req.RuntimeID
 
 	// Verify the caller owns this runtime's workspace.
-	if _, ok := h.requireDaemonRuntimeAccess(w, r, req.RuntimeID); !ok {
+	rt, ok := h.requireDaemonRuntimeAccess(w, r, req.RuntimeID)
+	if !ok {
 		return
 	}
 	authMs = time.Since(start).Milliseconds()
 
 	updateStart := time.Now()
-	_, err := h.Queries.UpdateAgentRuntimeHeartbeat(r.Context(), parseUUID(req.RuntimeID))
+	_, err := h.Queries.UpdateAgentRuntimeHeartbeat(r.Context(), rt.ID)
 	updateMs = time.Since(updateStart).Milliseconds()
 	if err != nil {
 		outcome = "error_update"

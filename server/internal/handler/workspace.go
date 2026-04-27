@@ -612,7 +612,9 @@ func (h *Handler) DeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Queries.DeleteWorkspace(r.Context(), parseUUID(workspaceID)); err != nil {
+	// At this point workspaceMember has resolved → workspaceID is a valid UUID
+	// (the lookup would have errored otherwise), so reuse the resolved value.
+	if err := h.Queries.DeleteWorkspace(r.Context(), requester.WorkspaceID); err != nil {
 		slog.Warn("delete workspace failed", append(logger.RequestAttrs(r), "error", err, "workspace_id", workspaceID)...)
 		writeError(w, http.StatusInternalServerError, "failed to delete workspace")
 		return

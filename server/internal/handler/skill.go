@@ -360,12 +360,12 @@ func (h *Handler) DeleteSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Queries.DeleteSkill(r.Context(), parseUUID(id)); err != nil {
+	if err := h.Queries.DeleteSkill(r.Context(), skill.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete skill")
 		return
 	}
 	actorType, actorID := h.resolveActor(r, requestUserID(r), uuidToString(skill.WorkspaceID))
-	h.publish(protocol.EventSkillDeleted, uuidToString(skill.WorkspaceID), actorType, actorID, map[string]any{"skill_id": id})
+	h.publish(protocol.EventSkillDeleted, uuidToString(skill.WorkspaceID), actorType, actorID, map[string]any{"skill_id": uuidToString(skill.ID)})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1200,7 +1200,18 @@ func (h *Handler) DeleteSkillFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileID := chi.URLParam(r, "fileId")
-	if err := h.Queries.DeleteSkillFile(r.Context(), parseUUID(fileID)); err != nil {
+	fileUUID, ok := parseUUIDOrBadRequest(w, fileID, "file id")
+	if !ok {
+		return
+	}
+	// Verify the file belongs to the parent skill we just authorized — guards
+	// against deleting a file owned by a different skill via the URL param.
+	file, err := h.Queries.GetSkillFile(r.Context(), fileUUID)
+	if err != nil || uuidToString(file.SkillID) != uuidToString(skill.ID) {
+		writeError(w, http.StatusNotFound, "skill file not found")
+		return
+	}
+	if err := h.Queries.DeleteSkillFile(r.Context(), file.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete skill file")
 		return
 	}

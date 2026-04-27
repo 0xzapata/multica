@@ -185,9 +185,17 @@ func (h *Handler) UpdateLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	idUUID, ok := parseUUIDOrBadRequest(w, id, "label id")
+	if !ok {
+		return
+	}
+	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace id")
+	if !ok {
+		return
+	}
 	params := db.UpdateLabelParams{
-		ID:          parseUUID(id),
-		WorkspaceID: parseUUID(workspaceID),
+		ID:          idUUID,
+		WorkspaceID: wsUUID,
 	}
 	if req.Name != nil {
 		name, err := validateLabelName(*req.Name)
@@ -236,10 +244,18 @@ func (h *Handler) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	idUUID, ok := parseUUIDOrBadRequest(w, id, "label id")
+	if !ok {
+		return
+	}
+	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace id")
+	if !ok {
+		return
+	}
 	// DeleteLabel is :one RETURNING id — ErrNoRows means the label wasn't in
 	// this workspace (404). Any other error is a real 500.
 	if _, err := h.Queries.DeleteLabel(r.Context(), db.DeleteLabelParams{
-		ID: parseUUID(id), WorkspaceID: parseUUID(workspaceID),
+		ID: idUUID, WorkspaceID: wsUUID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "label not found")

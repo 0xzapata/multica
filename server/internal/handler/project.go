@@ -271,9 +271,18 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	workspaceID := h.resolveWorkspaceID(r)
-	if _, err := h.Queries.GetProjectInWorkspace(r.Context(), db.GetProjectInWorkspaceParams{
-		ID: parseUUID(id), WorkspaceID: parseUUID(workspaceID),
-	}); err != nil {
+	idUUID, ok := parseUUIDOrBadRequest(w, id, "project id")
+	if !ok {
+		return
+	}
+	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace id")
+	if !ok {
+		return
+	}
+	project, err := h.Queries.GetProjectInWorkspace(r.Context(), db.GetProjectInWorkspaceParams{
+		ID: idUUID, WorkspaceID: wsUUID,
+	})
+	if err != nil {
 		writeError(w, http.StatusNotFound, "project not found")
 		return
 	}
@@ -281,11 +290,11 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.Queries.DeleteProject(r.Context(), parseUUID(id)); err != nil {
+	if err := h.Queries.DeleteProject(r.Context(), project.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete project")
 		return
 	}
-	h.publish(protocol.EventProjectDeleted, workspaceID, "member", userID, map[string]any{"project_id": id})
+	h.publish(protocol.EventProjectDeleted, workspaceID, "member", userID, map[string]any{"project_id": uuidToString(project.ID)})
 	w.WriteHeader(http.StatusNoContent)
 }
 

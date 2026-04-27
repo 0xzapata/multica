@@ -528,11 +528,20 @@ func (h *Handler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	commentUUID, ok := parseUUIDOrBadRequest(w, commentId, "comment id")
+	if !ok {
+		return
+	}
+
 	// Load comment scoped to current workspace.
 	workspaceID := h.resolveWorkspaceID(r)
+	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace id")
+	if !ok {
+		return
+	}
 	comment, err := h.Queries.GetCommentInWorkspace(r.Context(), db.GetCommentInWorkspaceParams{
-		ID:          parseUUID(commentId),
-		WorkspaceID: parseUUID(workspaceID),
+		ID:          commentUUID,
+		WorkspaceID: wsUUID,
 	})
 	if err != nil {
 		writeError(w, http.StatusNotFound, "comment not found")
@@ -553,9 +562,9 @@ func (h *Handler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Collect attachment URLs before CASCADE delete removes them.
-	attachmentURLs, _ := h.Queries.ListAttachmentURLsByCommentID(r.Context(), parseUUID(commentId))
+	attachmentURLs, _ := h.Queries.ListAttachmentURLsByCommentID(r.Context(), comment.ID)
 
-	if err := h.Queries.DeleteComment(r.Context(), parseUUID(commentId)); err != nil {
+	if err := h.Queries.DeleteComment(r.Context(), comment.ID); err != nil {
 		slog.Warn("delete comment failed", append(logger.RequestAttrs(r), "error", err, "comment_id", commentId)...)
 		writeError(w, http.StatusInternalServerError, "failed to delete comment")
 		return
@@ -564,7 +573,7 @@ func (h *Handler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 	h.deleteS3Objects(r.Context(), attachmentURLs)
 	slog.Info("comment deleted", append(logger.RequestAttrs(r), "comment_id", commentId, "issue_id", uuidToString(comment.IssueID))...)
 	h.publish(protocol.EventCommentDeleted, workspaceID, actorType, actorID, map[string]any{
-		"comment_id": commentId,
+		"comment_id": uuidToString(comment.ID),
 		"issue_id":   uuidToString(comment.IssueID),
 	})
 	w.WriteHeader(http.StatusNoContent)
