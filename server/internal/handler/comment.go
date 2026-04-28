@@ -577,6 +577,14 @@ func (h *Handler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 	// Collect attachment URLs before CASCADE delete removes them.
 	attachmentURLs, _ := h.Queries.ListAttachmentURLsByCommentID(r.Context(), comment.ID)
 
+	// Cancel any active tasks triggered by this comment so the agent does not
+	// run with the now-deleted content already embedded in its prompt. Must
+	// run before DeleteComment because the FK ON DELETE SET NULL would
+	// otherwise nullify trigger_comment_id and orphan those tasks in queued.
+	if err := h.TaskService.CancelTasksByTriggerComment(r.Context(), comment.ID); err != nil {
+		slog.Warn("cancel tasks for deleted trigger comment failed", append(logger.RequestAttrs(r), "error", err, "comment_id", commentId)...)
+	}
+
 	if err := h.Queries.DeleteComment(r.Context(), comment.ID); err != nil {
 		slog.Warn("delete comment failed", append(logger.RequestAttrs(r), "error", err, "comment_id", commentId)...)
 		writeError(w, http.StatusInternalServerError, "failed to delete comment")
