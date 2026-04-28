@@ -618,6 +618,7 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 			priorities = []string{p}
 		}
 	}
+	assigneeTypes := splitCSV(q.Get("assignee_types"))
 	assigneeIds, ok := parseUUIDSliceOrBadRequest(w, splitCSV(q.Get("assignee_ids")), "assignee_ids")
 	if !ok {
 		return
@@ -670,6 +671,7 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 		issues, err := h.Queries.ListOpenIssues(ctx, db.ListOpenIssuesParams{
 			WorkspaceID:       wsUUID,
 			Priorities:        priorities,
+			AssigneeTypes:     assigneeTypes,
 			AssigneeIds:       assigneeIds,
 			IncludeNoAssignee: includeNoAssignee,
 			CreatorIds:        creatorIds,
@@ -729,6 +731,7 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 		Offset:            int32(offset),
 		Status:            statusFilter,
 		Priorities:        priorities,
+		AssigneeTypes:     assigneeTypes,
 		AssigneeIds:       assigneeIds,
 		IncludeNoAssignee: includeNoAssignee,
 		CreatorIds:        creatorIds,
@@ -746,6 +749,7 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 		WorkspaceID:       wsUUID,
 		Status:            statusFilter,
 		Priorities:        priorities,
+		AssigneeTypes:     assigneeTypes,
 		AssigneeIds:       assigneeIds,
 		IncludeNoAssignee: includeNoAssignee,
 		CreatorIds:        creatorIds,

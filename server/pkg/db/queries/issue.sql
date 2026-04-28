@@ -6,6 +6,7 @@ FROM issue
 WHERE workspace_id = $1
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
   AND (sqlc.narg('priorities')::text[] IS NULL OR priority = ANY(sqlc.narg('priorities')::text[]))
+  AND (sqlc.narg('assignee_types')::text[] IS NULL OR assignee_type = ANY(sqlc.narg('assignee_types')::text[]))
   AND (
     (sqlc.narg('assignee_ids')::uuid[] IS NULL AND NOT COALESCE(sqlc.narg('include_no_assignee')::bool, false))
     OR assignee_id = ANY(sqlc.narg('assignee_ids')::uuid[])
@@ -91,6 +92,7 @@ FROM issue
 WHERE workspace_id = $1
   AND status NOT IN ('done', 'cancelled')
   AND (sqlc.narg('priorities')::text[] IS NULL OR priority = ANY(sqlc.narg('priorities')::text[]))
+  AND (sqlc.narg('assignee_types')::text[] IS NULL OR assignee_type = ANY(sqlc.narg('assignee_types')::text[]))
   AND (
     (sqlc.narg('assignee_ids')::uuid[] IS NULL AND NOT COALESCE(sqlc.narg('include_no_assignee')::bool, false))
     OR assignee_id = ANY(sqlc.narg('assignee_ids')::uuid[])
@@ -114,6 +116,7 @@ SELECT count(*) FROM issue
 WHERE workspace_id = $1
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
   AND (sqlc.narg('priorities')::text[] IS NULL OR priority = ANY(sqlc.narg('priorities')::text[]))
+  AND (sqlc.narg('assignee_types')::text[] IS NULL OR assignee_type = ANY(sqlc.narg('assignee_types')::text[]))
   AND (
     (sqlc.narg('assignee_ids')::uuid[] IS NULL AND NOT COALESCE(sqlc.narg('include_no_assignee')::bool, false))
     OR assignee_id = ANY(sqlc.narg('assignee_ids')::uuid[])

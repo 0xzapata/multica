@@ -364,6 +364,7 @@ export class ApiClient {
     if (params?.workspace_id) search.set("workspace_id", params.workspace_id);
     if (params?.status) search.set("status", params.status);
     if (params?.priorities?.length) search.set("priorities", params.priorities.join(","));
+    if (params?.assignee_types?.length) search.set("assignee_types", params.assignee_types.join(","));
     if (params?.assignee_ids?.length) search.set("assignee_ids", params.assignee_ids.join(","));
     if (params?.include_no_assignee) search.set("include_no_assignee", "true");
     if (params?.creator_ids?.length) search.set("creator_ids", params.creator_ids.join(","));

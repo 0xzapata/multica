@@ -50,34 +50,26 @@ export function IssuesPage() {
   // client-side filtering issues outside the first page silently fell out of
   // view (#1491). Status is intentionally not part of the wire filter — each
   // bucket fetches its own status, and we hide buckets via `visibleStatuses`.
-  const listFilter = useMemo(
-    () =>
-      buildIssueListFilter({
-        priorityFilters,
-        assigneeFilters,
-        includeNoAssignee,
-        creatorFilters,
-        projectFilters,
-        includeNoProject,
-        labelFilters,
-      }),
-    [priorityFilters, assigneeFilters, includeNoAssignee, creatorFilters, projectFilters, includeNoProject, labelFilters],
-  );
-  const { data: allIssues = [], isLoading: loading } = useQuery(
+  // Scope (Members/Agents) is mapped to assignee_types so it routes through
+  // the same SQL filter — applying scope client-side reproduced the same
+  // pagination-blind bug for the scope tabs.
+  const listFilter = useMemo(() => {
+    const base = buildIssueListFilter({
+      priorityFilters,
+      assigneeFilters,
+      includeNoAssignee,
+      creatorFilters,
+      projectFilters,
+      includeNoProject,
+      labelFilters,
+    });
+    if (scope === "members") return { ...base, assignee_types: ["member" as const] };
+    if (scope === "agents") return { ...base, assignee_types: ["agent" as const] };
+    return base;
+  }, [scope, priorityFilters, assigneeFilters, includeNoAssignee, creatorFilters, projectFilters, includeNoProject, labelFilters]);
+  const { data: issues = [], isLoading: loading } = useQuery(
     issueListOptions(wsId, listFilter),
   );
-
-  // Scope pre-filter: narrow by assignee type client-side. Scope subdivides
-  // the server-fetched buckets — applying it here keeps the header's count
-  // chips honest about how many of the (already-filtered) results belong to
-  // each scope.
-  const issues = useMemo(() => {
-    if (scope === "members")
-      return allIssues.filter((i) => i.assignee_type === "member");
-    if (scope === "agents")
-      return allIssues.filter((i) => i.assignee_type === "agent");
-    return allIssues;
-  }, [allIssues, scope]);
 
   // Fetch sub-issue progress from the backend so counts are accurate
   // regardless of client-side pagination or filtering of done issues.

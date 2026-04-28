@@ -52,6 +52,7 @@ const EMPTY_FILTER: IssueListFilter = {};
 function normalizeFilter(filter: IssueListFilter): IssueListFilter {
   const out: IssueListFilter = {};
   if (filter.priorities?.length) out.priorities = [...filter.priorities].sort();
+  if (filter.assignee_types?.length) out.assignee_types = [...filter.assignee_types].sort();
   if (filter.assignee_ids?.length) out.assignee_ids = [...filter.assignee_ids].sort();
   if (filter.include_no_assignee) out.include_no_assignee = true;
   if (filter.creator_ids?.length) out.creator_ids = [...filter.creator_ids].sort();

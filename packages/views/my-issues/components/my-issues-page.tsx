@@ -73,9 +73,15 @@ export function MyIssuesPage() {
     }
   }, [scope, user, myAgentIds, priorityFilters]);
 
-  const { data: myIssues = [], isLoading: loading } = useQuery(
-    myIssueListOptions(wsId, scope, filter),
-  );
+  // The "My Agents" tab is empty by definition when the user owns no agents.
+  // Without this guard the filter would resolve to `assignee_ids: []`, which
+  // the API client and query-key normalizer drop as falsy — the request would
+  // then go out unfiltered and surface other people's issues under "My Agents".
+  const myAgentsEmpty = scope === "agents" && myAgentIds.length === 0;
+  const { data: myIssues = [], isLoading: loading } = useQuery({
+    ...myIssueListOptions(wsId, scope, filter),
+    enabled: !myAgentsEmpty,
+  });
   // Server-side filtering means `myIssues` already reflects the active scope
   // + priority filter; rendering this directly avoids the pagination bug
   // that the old client-side `filterIssues` step caused.

@@ -35,6 +35,8 @@ export interface ListIssuesParams {
   workspace_id?: string;
   status?: IssueStatus;
   priorities?: IssuePriority[];
+  /** Match issues whose assignee is one of these polymorphic types ("member"/"agent"). */
+  assignee_types?: IssueAssigneeType[];
   assignee_ids?: string[];
   /** When true, also include issues with no assignee (OR'd with assignee_ids). */
   include_no_assignee?: boolean;
