@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CircleCheck,
   MoreHorizontal,
   PanelRight,
   Pin,
@@ -42,7 +43,8 @@ import { IssueActionsDropdown, useIssueActions } from "../actions";
 import { ProjectPicker } from "../../projects/components/project-picker";
 import { CommentCard } from "./comment-card";
 import { CommentInput } from "./comment-input";
-import { AgentLiveCard, TaskRunHistory } from "./agent-live-card";
+import { AgentLiveCard } from "./agent-live-card";
+import { ExecutionLogSection } from "./execution-log-section";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@multica/core/auth";
 import { useCurrentWorkspace, useWorkspacePaths } from "@multica/core/paths";
@@ -137,6 +139,8 @@ function formatTokenCount(n: number): string {
 interface IssueDetailProps {
   issueId: string;
   onDelete?: () => void;
+  /** Called after the issue is marked as done via the toolbar button. */
+  onDone?: () => void;
   defaultSidebarOpen?: boolean;
   layoutId?: string;
   /** When set, the issue detail will auto-scroll to this comment and briefly highlight it. */
@@ -147,7 +151,7 @@ interface IssueDetailProps {
 // IssueDetail
 // ---------------------------------------------------------------------------
 
-export function IssueDetail({ issueId, onDelete, defaultSidebarOpen = true, layoutId = "multica_issue_detail_layout", highlightCommentId }: IssueDetailProps) {
+export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = true, layoutId = "multica_issue_detail_layout", highlightCommentId }: IssueDetailProps) {
   const id = issueId;
   const router = useNavigation();
   const user = useAuthStore((s) => s.user);
@@ -272,7 +276,7 @@ export function IssueDetail({ issueId, onDelete, defaultSidebarOpen = true, layo
     if (el) {
       didHighlightRef.current = highlightCommentId;
       requestAnimationFrame(() => {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.scrollIntoView({ behavior: "instant", block: "center" });
         setHighlightedId(highlightCommentId);
         const timer = setTimeout(() => setHighlightedId(null), 2000);
         return () => clearTimeout(timer);
@@ -439,6 +443,11 @@ export function IssueDetail({ issueId, onDelete, defaultSidebarOpen = true, layo
         </div>}
       </div>
 
+      {/* Execution log — active runs + collapsed past runs. Self-contained;
+          owns its own collapse state and WS subscriptions. Hides itself
+          when there are no runs to show. */}
+      <ExecutionLogSection issueId={id} />
+
       {/* Token usage */}
       {usage && usage.task_count > 0 && (
         <div>
@@ -500,14 +509,28 @@ export function IssueDetail({ issueId, onDelete, defaultSidebarOpen = true, layo
                 <ChevronRight className="h-3 w-3 text-muted-foreground/50 shrink-0" />
               </>
             )}
-            <span className="shrink-0 text-muted-foreground">
-              {issue.identifier}
-            </span>
             <span className="truncate font-medium text-foreground">
               {issue.title}
             </span>
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            {issue.status !== "done" && issue.status !== "cancelled" && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-muted-foreground"
+                      onClick={() => { handleUpdateField({ status: "done" }); onDone?.(); }}
+                    >
+                      <CircleCheck />
+                    </Button>
+                  }
+                />
+                <TooltipContent side="bottom">Mark as done</TooltipContent>
+              </Tooltip>
+            )}
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -835,16 +858,13 @@ export function IssueDetail({ issueId, onDelete, defaultSidebarOpen = true, layo
               </div>
             </div>
 
-            {/* Agent live output — sticky inside the Activity section so it
-                stays pinned while scrolling through TaskRunHistory + comments.
-                Keyed by issue id so switching issues remounts the card and
-                clears any in-flight task state from the previous issue. */}
+            {/* Agent live output — sticky banner in the activity section,
+                keyed by issue id so switching issues remounts the card and
+                clears any in-flight task state from the previous issue.
+                The execution log itself (per-task timeline + past runs)
+                lives in the right panel via ExecutionLogSection — this
+                card is just a header-style "agent is working" anchor. */}
             <AgentLiveCard key={id} issueId={id} />
-
-            {/* Agent execution history */}
-            <div className="mt-3">
-              <TaskRunHistory key={id} issueId={id} />
-            </div>
 
             {/* Timeline entries */}
             <div className="mt-4 flex flex-col gap-3">
