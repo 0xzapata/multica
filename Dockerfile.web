@@ -34,12 +34,8 @@ COPY packages/ packages/
 # Re-link after source overlay (fixes any symlinks overwritten by COPY)
 RUN pnpm install --frozen-lockfile --offline
 
-# Set build-time env: use localhost as default (overridable at runtime)
-# For runtime flexibility, pass NEXT_PUBLIC_API_URL to the container
-ARG REMOTE_API_URL=http://localhost:8080
 ARG NEXT_PUBLIC_WS_URL
 ARG NEXT_PUBLIC_APP_VERSION=dev
-ENV REMOTE_API_URL=$REMOTE_API_URL
 ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 ENV NEXT_PUBLIC_APP_VERSION=$NEXT_PUBLIC_APP_VERSION
 ENV STANDALONE=true
@@ -63,6 +59,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 # Copy public assets
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
+# Copy runtime proxy entrypoint
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/runtime-server.mjs ./apps/web/runtime-server.mjs
 
 USER nextjs
 
@@ -70,4 +68,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-CMD ["node", "apps/web/server.js"]
+CMD ["node", "apps/web/runtime-server.mjs"]

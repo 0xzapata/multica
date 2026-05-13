@@ -1,10 +1,5 @@
 import type { NextConfig } from "next";
-import { config } from "dotenv";
-import { resolve } from "path";
 
-// Load root .env so REMOTE_API_URL is available to next.config.ts (build-time only)
-// For runtime, use NEXT_PUBLIC_API_URL env var which can be passed to the container
-const remoteApiUrl = process.env.REMOTE_API_URL || "http://localhost:8080";
 const docsUrl = process.env.DOCS_URL || process.env.NEXT_PUBLIC_DOCS_URL || "http://localhost:4000";
 
 // Parse hostnames from CORS_ALLOWED_ORIGINS so that Next.js dev server
@@ -45,24 +40,7 @@ const nextConfig: NextConfig = {
           destination: `${docsUrl}/docs/:path*`,
         },
       ],
-      afterFiles: [
-        {
-          source: "/api/:path*",
-          destination: `${remoteApiUrl}/api/:path*`,
-        },
-        {
-          source: "/ws",
-          destination: `${remoteApiUrl}/ws`,
-        },
-        {
-          source: "/auth/:path*",
-          destination: `${remoteApiUrl}/auth/:path*`,
-        },
-        {
-          source: "/uploads/:path*",
-          destination: `${remoteApiUrl}/uploads/:path*`,
-        },
-      ],
+      afterFiles: [],
       fallback: [],
     };
   },

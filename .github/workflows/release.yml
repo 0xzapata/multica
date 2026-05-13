@@ -216,8 +216,6 @@ jobs:
           - platform: linux/arm64
             runs-on: ubuntu-24.04-arm
     runs-on: ${{ matrix.runs-on }}
-    env:
-      REMOTE_API_URL: ${{ vars.REMOTE_API_URL || 'http://backend:8080' }}
     steps:
       - name: Prepare
         run: |
@@ -258,7 +256,6 @@ jobs:
           cache-from: type=gha,scope=release-web-${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,mode=max,scope=release-web-${{ env.PLATFORM_PAIR }}
           build-args: |
-            REMOTE_API_URL=${{ env.REMOTE_API_URL }}
             NEXT_PUBLIC_APP_VERSION=${{ needs.verify.outputs.tag_name }}
           outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/multica-web,push-by-digest=true,name-canonical=true,push=true
 
