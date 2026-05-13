@@ -1,7 +1,7 @@
 # --- Dependencies ---
 FROM node:22-alpine AS deps
 
-RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
+RUN npm install -g pnpm@9
 
 WORKDIR /app
 
@@ -19,7 +19,7 @@ RUN pnpm install --frozen-lockfile
 # --- Build ---
 FROM node:22-alpine AS builder
 
-RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
+RUN npm install -g pnpm@9
 
 WORKDIR /app
 
@@ -34,8 +34,9 @@ COPY packages/ packages/
 # Re-link after source overlay (fixes any symlinks overwritten by COPY)
 RUN pnpm install --frozen-lockfile --offline
 
-# Set build-time env: tells Next.js rewrites to proxy API calls to the backend service
-ARG REMOTE_API_URL=http://backend:8080
+# Set build-time env: use localhost as default (overridable at runtime)
+# For runtime flexibility, pass NEXT_PUBLIC_API_URL to the container
+ARG REMOTE_API_URL=http://localhost:8080
 ARG NEXT_PUBLIC_WS_URL
 ARG NEXT_PUBLIC_APP_VERSION=dev
 ENV REMOTE_API_URL=$REMOTE_API_URL
