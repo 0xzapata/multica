@@ -1,12 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { issueKeys } from "./queries";
+import { labelKeys } from "../labels/queries";
 import {
   addIssueToBuckets,
   findIssueLocation,
   patchIssueInBuckets,
-  removeIssueFromBuckets,
 } from "./cache-helpers";
-import type { Issue, Label } from "../types";
+import { cleanupDeletedIssueCaches } from "./delete-cache";
+import type { Issue, IssueLabelsResponse, Label } from "../types";
 import type { ListIssuesCache } from "../types";
 
 export function onIssueCreated(
@@ -73,9 +74,15 @@ export function onIssueUpdated(
 }
 
 /**
- * Patch an issue's `labels` field in-place across the list cache, my-issues
- * caches, and the detail cache. Triggered by the `issue_labels:changed` WS
- * event after attach/detach so list/board chips update without a refetch.
+ * Patch an issue's labels in-place across the list cache, my-issues caches,
+ * the detail cache, and the per-issue label cache. Triggered by the
+ * `issue_labels:changed` WS event after attach/detach so list/board chips
+ * and the issue-detail Properties LabelPicker update without a refetch.
+ *
+ * The byIssue cache backs `LabelPicker`; without patching it, externally
+ * driven label changes (agents, other tabs) leave the picker stale until it
+ * remounts — `staleTime: Infinity` + `refetchOnWindowFocus: false` (see
+ * `query-client.ts`) means focus changes won't recover it.
  */
 export function onIssueLabelsChanged(
   qc: QueryClient,
@@ -89,6 +96,9 @@ export function onIssueLabelsChanged(
   qc.setQueryData<Issue>(issueKeys.detail(wsId, issueId), (old) =>
     old ? { ...old, labels } : old,
   );
+  qc.setQueryData<IssueLabelsResponse>(labelKeys.byIssue(wsId, issueId), (old) =>
+    old ? { ...old, labels } : old,
+  );
   qc.invalidateQueries({ queryKey: issueKeys.myAll(wsId) });
 }
 
@@ -97,21 +107,5 @@ export function onIssueDeleted(
   wsId: string,
   issueId: string,
 ) {
-  // Look up the issue before removing it to check for parent_issue_id
-  const listData = qc.getQueryData<ListIssuesCache>(issueKeys.list(wsId));
-  const deleted = listData ? findIssueLocation(listData, issueId)?.issue : undefined;
-
-  qc.setQueryData<ListIssuesCache>(issueKeys.list(wsId), (old) =>
-    old ? removeIssueFromBuckets(old, issueId) : old,
-  );
-  qc.invalidateQueries({ queryKey: issueKeys.myAll(wsId) });
-  qc.removeQueries({ queryKey: issueKeys.detail(wsId, issueId) });
-  qc.removeQueries({ queryKey: issueKeys.timeline(issueId) });
-  qc.removeQueries({ queryKey: issueKeys.reactions(issueId) });
-  qc.removeQueries({ queryKey: issueKeys.subscribers(issueId) });
-  qc.removeQueries({ queryKey: issueKeys.children(wsId, issueId) });
-  if (deleted?.parent_issue_id) {
-    qc.invalidateQueries({ queryKey: issueKeys.children(wsId, deleted.parent_issue_id) });
-    qc.invalidateQueries({ queryKey: issueKeys.childProgress(wsId) });
-  }
+  cleanupDeletedIssueCaches(qc, wsId, issueId);
 }
