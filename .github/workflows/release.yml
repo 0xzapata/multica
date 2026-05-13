@@ -7,6 +7,12 @@ on:
       # tags broadly at the trigger layer, then enforce strict semver below.
       - "v*.*.*"
       - "!v*-dirty*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag to build, e.g. v0.2.33-zeabur"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -18,17 +24,19 @@ jobs:
     outputs:
       tag_name: ${{ steps.release_meta.outputs.tag_name }}
       is_stable: ${{ steps.release_meta.outputs.is_stable }}
+      release_sha: ${{ steps.release_meta.outputs.release_sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
 
       - name: Validate tag name
         id: release_meta
         shell: bash
         run: |
-          tag="${GITHUB_REF_NAME}"
+          tag="${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}"
           echo "Triggered by tag: $tag"
           if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "::error::Release tags must look like vX.Y.Z or vX.Y.Z-suffix; got '$tag'."
@@ -39,6 +47,7 @@ jobs:
             exit 1
           fi
           echo "tag_name=$tag" >> "$GITHUB_OUTPUT"
+          echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           if [[ "$tag" == *-* ]]; then
             echo "is_stable=false" >> "$GITHUB_OUTPUT"
           else
@@ -68,6 +77,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -107,6 +117,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
 
       - name: Compute backend image labels
         id: meta
@@ -140,7 +152,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=release-backend-${{ env.PLATFORM_PAIR }}
           build-args: |
             VERSION=${{ needs.verify.outputs.tag_name }}
-            COMMIT=${{ github.sha }}
+            COMMIT=${{ needs.verify.outputs.release_sha }}
           outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/multica-backend,push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
@@ -224,6 +236,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
 
       - name: Compute web image labels
         id: meta
@@ -342,6 +356,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
 
       - name: Install rpmbuild (Linux)
         if: matrix.target == 'linux'
