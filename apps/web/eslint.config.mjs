@@ -4,6 +4,16 @@ export default [
   ...nextConfig,
   { ignores: [".next/"] },
   {
+    files: ["runtime-server.mjs"],
+    languageOptions: {
+      globals: {
+        console: "readonly",
+        process: "readonly",
+        URL: "readonly",
+      },
+    },
+  },
+  {
     files: ["**/*.test.{ts,tsx}", "**/test/**/*.{ts,tsx}"],
     rules: {
       "react/display-name": "off",

@@ -58,3 +58,8 @@ server/server
 data/
 .kilo
 .idea
+
+# local graph/context outputs
+.imc
+graphify-out/
+.omc/

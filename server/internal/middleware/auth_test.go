@@ -26,6 +26,9 @@ func newRedisTestClient(t *testing.T) *redis.Client {
 	if err != nil {
 		t.Fatalf("parse REDIS_TEST_URL: %v", err)
 	}
+	// Use a package-specific DB so `go test ./...` cannot have another
+	// package's Redis cleanup flush middleware auth cache entries mid-test.
+	opts.DB = 11
 	rdb := redis.NewClient(opts)
 	ctx := context.Background()
 	if err := rdb.Ping(ctx).Err(); err != nil {
