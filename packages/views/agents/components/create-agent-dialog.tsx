@@ -165,17 +165,15 @@ export function CreateAgentDialog({
       };
       if (template) {
         // Duplicate path: forward the hidden config fields the source
-        // agent had so the clone is functional out of the box (env / args
-        // / concurrency). Skills now flow through the dialog form, so we
-        // don't blindly carry template.skills here anymore — the form's
-        // selectedSkillIds is the source of truth.
+        // agent had so the clone is functional out of the box (args /
+        // concurrency). Skills flow through the dialog form. As of
+        // MUL-2600 the agent resource shape no longer carries
+        // custom_env values, so duplication cannot copy env at all —
+        // the user has to re-set env on the clone via the env tab
+        // (which now goes through the audited `/env` endpoint). The
+        // dialog's create call still accepts custom_env at create
+        // time, but the source values aren't available here.
         if (template.custom_args.length) data.custom_args = template.custom_args;
-        if (
-          !template.custom_env_redacted &&
-          Object.keys(template.custom_env).length > 0
-        ) {
-          data.custom_env = template.custom_env;
-        }
         if (template.max_concurrent_tasks) {
           data.max_concurrent_tasks = template.max_concurrent_tasks;
         }
@@ -225,7 +223,7 @@ export function CreateAgentDialog({
 
   return (
     <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="p-0 gap-0 flex flex-col overflow-hidden !top-1/2 !left-1/2 !-translate-x-1/2 !-translate-y-1/2 !w-full !max-w-5xl !h-[85vh]">
+      <DialogContent className="p-0 gap-0 flex flex-col overflow-hidden !top-1/2 !left-1/2 !-translate-x-1/2 !-translate-y-1/2 !w-full !max-w-2xl !h-[85vh]">
         <DialogHeader className="border-b px-5 py-3 space-y-0">
           <DialogTitle className="text-base font-semibold">{headerTitle}</DialogTitle>
           {isDuplicate && template && (

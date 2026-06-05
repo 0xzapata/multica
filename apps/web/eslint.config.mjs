@@ -2,7 +2,7 @@ import nextConfig from "@multica/eslint-config/next";
 
 export default [
   ...nextConfig,
-  { ignores: [".next/"] },
+  { ignores: [".next/", ".source/"] },
   {
     files: ["runtime-server.mjs"],
     languageOptions: {

@@ -219,6 +219,8 @@ const mockApiObj = vi.hoisted(() => ({
   removeCommentReaction: vi.fn(),
   listMembers: vi.fn().mockResolvedValue([{ user_id: "user-1", name: "Test User", email: "test@test.com", role: "admin" }]),
   listAgents: vi.fn().mockResolvedValue([]),
+  getProject: vi.fn(),
+  listProjects: vi.fn().mockResolvedValue({ projects: [] }),
 }));
 
 vi.mock("@multica/core/api", () => ({
@@ -348,11 +350,6 @@ vi.mock("@multica/core/modals", () => ({
   ),
 }));
 
-// Mock core/utils
-vi.mock("@multica/core/utils", () => ({
-  timeAgo: () => "1d ago",
-}));
-
 // Mock core/hooks/use-file-upload
 vi.mock("@multica/core/hooks/use-file-upload", () => ({
   useFileUpload: () => ({ uploadWithToast: vi.fn().mockResolvedValue("https://example.com/file.png") }),
@@ -401,7 +398,9 @@ const mockIssue: Issue = {
   parent_issue_id: null,
   project_id: null,
   position: 0,
+  start_date: null,
   due_date: "2026-06-01T00:00:00Z",
+  metadata: {},
   created_at: "2026-01-15T00:00:00Z",
   updated_at: "2026-01-20T00:00:00Z",
 };
@@ -507,6 +506,9 @@ describe("IssueDetail (shared)", () => {
       { user_id: "user-1", name: "Test User", email: "test@test.com", role: "admin" },
     ]);
     mockApiObj.listAgents.mockResolvedValue([]);
+    // Reset project mock — individual tests override per case. Default fixture
+    // has project_id: null so getProject is not invoked.
+    mockApiObj.getProject.mockReset();
   });
 
   it("shows loading skeleton while data is loading", () => {
@@ -529,30 +531,104 @@ describe("IssueDetail (shared)", () => {
     expect(screen.getByDisplayValue("Add JWT auth to the backend")).toBeInTheDocument();
   });
 
-  it("renders workspace name as breadcrumb link", async () => {
+  it("renders the issue title leaf as a link to the issue detail page", async () => {
     renderIssueDetail();
 
-    await waitFor(() => {
-      expect(screen.getByText("Test WS")).toBeInTheDocument();
-    });
-
-    const wsLink = screen.getByText("Test WS");
-    // After the URL-driven workspace refactor, issue paths are scoped under
-    // /<workspaceSlug>/issues.
-    expect(wsLink.closest("a")).toHaveAttribute("href", "/test/issues");
+    // The breadcrumb leaf is the whole "identifier + title" string wrapped in a
+    // single link to the issue's own detail route (used to open the full page
+    // from the inline Inbox pane). A bare issue has no ancestor crumbs.
+    const leaf = await screen.findByText("TES-1 Implement authentication");
+    expect(leaf.closest("a")).toHaveAttribute("href", "/test/issues/issue-1");
   });
 
-  it("renders properties sidebar with status, priority, assignee, due date", async () => {
+  it("omits the project breadcrumb segment when the issue has no project_id", async () => {
+    // Default fixture has project_id: null.
+    renderIssueDetail();
+
+    // Leaf renders once loaded; a bare issue has no ancestor crumbs at all.
+    await screen.findByText("TES-1 Implement authentication");
+
+    // Project is never fetched and no project crumb appears.
+    expect(mockApiObj.getProject).not.toHaveBeenCalled();
+    expect(screen.queryByText("Marketing site refresh")).not.toBeInTheDocument();
+  });
+
+  it("renders the project breadcrumb segment when the issue belongs to a project", async () => {
+    mockApiObj.getIssue.mockResolvedValue({ ...mockIssue, project_id: "p-1" });
+    mockApiObj.getProject.mockResolvedValue({
+      id: "p-1",
+      workspace_id: "ws-1",
+      title: "Marketing site refresh",
+      description: null,
+      icon: "🚀",
+      status: "in_progress",
+      priority: "none",
+      lead_type: null,
+      lead_id: null,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      issue_count: 0,
+      done_count: 0,
+      resource_count: 0,
+    });
+
+    renderIssueDetail();
+
+    const projectLink = await screen.findByText("Marketing site refresh");
+    // The whole project segment is a single AppLink pointing at the project
+    // detail route under the active workspace slug.
+    expect(projectLink.closest("a")).toHaveAttribute("href", "/test/projects/p-1");
+  });
+
+  it("renders properties sidebar with all core rows plus set optional rows", async () => {
     renderIssueDetail();
 
     await waitFor(() => {
       expect(screen.getByText("Properties")).toBeInTheDocument();
     });
 
+    // Core rows — always rendered regardless of whether the issue has a value.
     expect(screen.getByText("Status")).toBeInTheDocument();
-    expect(screen.getByText("Priority")).toBeInTheDocument();
     expect(screen.getByText("Assignee")).toBeInTheDocument();
+    // "Project" appears twice (row label + picker stub), so disambiguate by id.
+    expect(screen.getByTestId("project-picker")).toBeInTheDocument();
+    // priority="high" + due_date are set in the fixture, so both optional rows show.
+    expect(screen.getByText("Priority")).toBeInTheDocument();
     expect(screen.getByText("Due date")).toBeInTheDocument();
+    // No labels are attached in the fixture — the Labels optional row
+    // must stay hidden by default.
+    expect(screen.queryByText("Labels")).not.toBeInTheDocument();
+    // Parent issue lives in its own section and only renders when the
+    // issue actually has a parent — the fixture has none.
+    expect(screen.queryByText("Parent issue")).not.toBeInTheDocument();
+    // The "+ Add property" affordance is always offered while any
+    // optional field is still hidden.
+    expect(screen.getByText("Add property")).toBeInTheDocument();
+  });
+
+  it("hides every optional property row when none are set", async () => {
+    // Override the default fixture: nothing optional set.
+    mockApiObj.getIssue.mockResolvedValue({
+      ...mockIssue,
+      priority: "none",
+      start_date: null,
+      due_date: null,
+    });
+
+    renderIssueDetail();
+
+    await waitFor(() => {
+      expect(screen.getByText("Properties")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("Priority")).not.toBeInTheDocument();
+    expect(screen.queryByText("Due date")).not.toBeInTheDocument();
+    expect(screen.queryByText("Labels")).not.toBeInTheDocument();
+    // Project stays as a core row regardless of value.
+    expect(screen.getByTestId("project-picker")).toBeInTheDocument();
+    // No parent → no standalone Parent issue section either.
+    expect(screen.queryByText("Parent issue")).not.toBeInTheDocument();
+    expect(screen.getByText("Add property")).toBeInTheDocument();
   });
 
   it("uses a non-resizable layout with the sidebar sheet closed by default on mobile", async () => {
@@ -566,6 +642,69 @@ describe("IssueDetail (shared)", () => {
 
     expect(screen.queryByTestId("panel-group")).not.toBeInTheDocument();
     expect(screen.queryByText("Properties")).not.toBeInTheDocument();
+  });
+
+  it("hides metadata content from the sidebar and shows a button when the bag has keys", async () => {
+    // Metadata is agent-facing; the sidebar only exposes a button that opens
+    // the raw JSON on demand. Keys are NOT rendered inline anywhere.
+    mockApiObj.getIssue.mockResolvedValue({
+      ...mockIssue,
+      metadata: {
+        pr_url: "https://example.com/pr/1",
+        pipeline_status: "running",
+      },
+    });
+
+    renderIssueDetail();
+
+    await waitFor(() => {
+      // Trigger label includes a "· N" count so users can see payload size
+      // before clicking — accept any count via regex.
+      expect(screen.getByRole("button", { name: /^Metadata\b/ })).toBeInTheDocument();
+    });
+
+    // Key names are not rendered in the sidebar prior to opening the dialog.
+    expect(screen.queryByText("pr_url")).not.toBeInTheDocument();
+    expect(screen.queryByText("pipeline_status")).not.toBeInTheDocument();
+  });
+
+  it("opens a dialog with formatted JSON when the Metadata button is clicked", async () => {
+    mockApiObj.getIssue.mockResolvedValue({
+      ...mockIssue,
+      metadata: {
+        pr_url: "https://example.com/pr/1",
+        pipeline_status: "running",
+      },
+    });
+
+    renderIssueDetail();
+
+    const button = await screen.findByRole("button", { name: /^Metadata\b/ });
+    fireEvent.click(button);
+
+    // The dialog renders a <pre> containing the formatted JSON; checking the
+    // exact serialized payload also verifies the indent / structure.
+    const expected = JSON.stringify(
+      { pr_url: "https://example.com/pr/1", pipeline_status: "running" },
+      null,
+      2,
+    );
+    await waitFor(() => {
+      const pre = document.querySelector("pre");
+      expect(pre).not.toBeNull();
+      expect(pre!.textContent).toBe(expected);
+    });
+  });
+
+  it("hides the Metadata button entirely when the bag is empty", async () => {
+    // Default fixture already has metadata: {}, asserted explicitly here.
+    renderIssueDetail();
+
+    await waitFor(() => {
+      expect(screen.getByText("Details")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole("button", { name: /^Metadata\b/ })).not.toBeInTheDocument();
   });
 
   it("renders Details section with Created by and dates", async () => {
@@ -618,6 +757,207 @@ describe("IssueDetail (shared)", () => {
     });
 
     expect(screen.getByText("I can help with this")).toBeInTheDocument();
+  });
+
+  it("collapses non-trailing activity blocks and expands the last one by default", async () => {
+    // Timeline shape:
+    //   [activities: status_changed, priority_changed] ← block A (older)
+    //   [comment-1]
+    //   [activities: due_date_changed]                  ← block B (latest)
+    // Block A should be collapsed; block B should be expanded.
+    mockApiObj.listTimeline.mockResolvedValue([
+      {
+        type: "activity",
+        id: "act-1",
+        actor_type: "member",
+        actor_id: "user-1",
+        action: "status_changed",
+        details: { from: "todo", to: "in_progress" },
+        created_at: "2026-01-16T00:00:00Z",
+      },
+      {
+        type: "activity",
+        id: "act-2",
+        actor_type: "member",
+        actor_id: "user-1",
+        action: "priority_changed",
+        details: { from: "low", to: "high" },
+        created_at: "2026-01-16T01:00:00Z",
+      },
+      {
+        type: "comment",
+        id: "comment-1",
+        actor_type: "member",
+        actor_id: "user-1",
+        content: "Talking it through",
+        parent_id: null,
+        created_at: "2026-01-17T00:00:00Z",
+        updated_at: "2026-01-17T00:00:00Z",
+        comment_type: "comment",
+      },
+      {
+        type: "activity",
+        id: "act-3",
+        actor_type: "member",
+        actor_id: "user-1",
+        action: "due_date_changed",
+        details: { to: "2026-02-01T00:00:00Z" },
+        created_at: "2026-01-18T00:00:00Z",
+      },
+    ] as TimelineEntry[]);
+
+    renderIssueDetail();
+
+    // Latest block (single activity) is expanded — its rendered text is visible.
+    await waitFor(() => {
+      expect(screen.getByText(/set due date to/i)).toBeInTheDocument();
+    });
+
+    // Older block is collapsed: shows the summary, hides the individual entries.
+    expect(screen.getByText("2 activities")).toBeInTheDocument();
+    expect(screen.queryByText(/changed status/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/changed priority/i)).not.toBeInTheDocument();
+
+    // Clicking the summary expands the older block.
+    fireEvent.click(screen.getByText("2 activities"));
+    await waitFor(() => {
+      expect(screen.getByText(/changed status/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/changed priority/i)).toBeInTheDocument();
+  });
+
+  it("truncates the trailing activity block to the most recent 8 entries with a show-more toggle", async () => {
+    // 10 activities, all in the trailing block (no comment after them, so it's
+    // the trailing block by definition). Alternating action types so the
+    // 2-minute coalesce window never merges consecutive entries — we end up
+    // with 10 distinct rows.
+    const trailingBlock: TimelineEntry[] = [
+      { type: "activity", id: "act-1", actor_type: "member", actor_id: "user-1", action: "status_changed", details: { from: "todo", to: "in_progress" }, created_at: "2026-01-18T00:00:00Z" },
+      { type: "activity", id: "act-2", actor_type: "member", actor_id: "user-1", action: "priority_changed", details: { from: "low", to: "medium" }, created_at: "2026-01-18T00:01:00Z" },
+      { type: "activity", id: "act-3", actor_type: "member", actor_id: "user-1", action: "status_changed", details: { from: "in_progress", to: "in_review" }, created_at: "2026-01-18T00:02:00Z" },
+      { type: "activity", id: "act-4", actor_type: "member", actor_id: "user-1", action: "priority_changed", details: { from: "medium", to: "high" }, created_at: "2026-01-18T00:03:00Z" },
+      { type: "activity", id: "act-5", actor_type: "member", actor_id: "user-1", action: "status_changed", details: { from: "in_review", to: "done" }, created_at: "2026-01-18T00:04:00Z" },
+      { type: "activity", id: "act-6", actor_type: "member", actor_id: "user-1", action: "priority_changed", details: { from: "high", to: "urgent" }, created_at: "2026-01-18T00:05:00Z" },
+      { type: "activity", id: "act-7", actor_type: "member", actor_id: "user-1", action: "status_changed", details: { from: "done", to: "blocked" }, created_at: "2026-01-18T00:06:00Z" },
+      { type: "activity", id: "act-8", actor_type: "member", actor_id: "user-1", action: "priority_changed", details: { from: "urgent", to: "low" }, created_at: "2026-01-18T00:07:00Z" },
+      { type: "activity", id: "act-9", actor_type: "member", actor_id: "user-1", action: "status_changed", details: { from: "blocked", to: "todo" }, created_at: "2026-01-18T00:08:00Z" },
+      { type: "activity", id: "act-10", actor_type: "member", actor_id: "user-1", action: "due_date_changed", details: { to: "2026-02-01T00:00:00Z" }, created_at: "2026-01-18T00:09:00Z" },
+    ] as TimelineEntry[];
+    mockApiObj.listTimeline.mockResolvedValue(trailingBlock);
+
+    renderIssueDetail();
+
+    // In the truncated default state the "N activities" collapse header
+    // stays hidden — the "Show N more" link is the only control we want
+    // to expose for a glance at recent activity.
+    await waitFor(() => {
+      expect(screen.getByText("Show 2 more activities")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("10 activities")).not.toBeInTheDocument();
+
+    // Only the 8 most recent entries (act-3..act-10) are rendered by default.
+    // act-1 and act-2 are folded behind the show-more line.
+    expect(screen.getByText(/from In Progress to In Review/i)).toBeInTheDocument(); // act-3
+    expect(screen.getByText(/set due date to/i)).toBeInTheDocument(); // act-10
+    expect(screen.queryByText(/from Todo to In Progress/i)).not.toBeInTheDocument(); // act-1
+    expect(screen.queryByText(/from Low to Medium/i)).not.toBeInTheDocument(); // act-2
+
+    // Clicking the toggle reveals the older entries in place and brings the
+    // full "N activities" header back (so the user can fold the block).
+    fireEvent.click(screen.getByText("Show 2 more activities"));
+    await waitFor(() => {
+      expect(screen.getByText(/from Todo to In Progress/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/from Low to Medium/i)).toBeInTheDocument();
+    expect(screen.getByText(/set due date to/i)).toBeInTheDocument();
+    expect(screen.getByText("10 activities")).toBeInTheDocument();
+    expect(screen.queryByText(/Show \d+ more activit/i)).not.toBeInTheDocument();
+  });
+
+  it("does not show the show-more toggle when the trailing block has 8 or fewer entries", async () => {
+    const trailingBlock: TimelineEntry[] = [
+      { type: "activity", id: "act-1", actor_type: "member", actor_id: "user-1", action: "status_changed", details: { from: "todo", to: "in_progress" }, created_at: "2026-01-18T00:00:00Z" },
+      { type: "activity", id: "act-2", actor_type: "member", actor_id: "user-1", action: "priority_changed", details: { from: "low", to: "high" }, created_at: "2026-01-18T00:01:00Z" },
+      { type: "activity", id: "act-3", actor_type: "member", actor_id: "user-1", action: "status_changed", details: { from: "in_progress", to: "in_review" }, created_at: "2026-01-18T00:02:00Z" },
+      { type: "activity", id: "act-4", actor_type: "member", actor_id: "user-1", action: "priority_changed", details: { from: "high", to: "urgent" }, created_at: "2026-01-18T00:03:00Z" },
+      { type: "activity", id: "act-5", actor_type: "member", actor_id: "user-1", action: "status_changed", details: { from: "in_review", to: "done" }, created_at: "2026-01-18T00:04:00Z" },
+      { type: "activity", id: "act-6", actor_type: "member", actor_id: "user-1", action: "priority_changed", details: { from: "urgent", to: "low" }, created_at: "2026-01-18T00:05:00Z" },
+      { type: "activity", id: "act-7", actor_type: "member", actor_id: "user-1", action: "status_changed", details: { from: "done", to: "blocked" }, created_at: "2026-01-18T00:06:00Z" },
+      { type: "activity", id: "act-8", actor_type: "member", actor_id: "user-1", action: "due_date_changed", details: { to: "2026-02-01T00:00:00Z" }, created_at: "2026-01-18T00:07:00Z" },
+    ] as TimelineEntry[];
+    mockApiObj.listTimeline.mockResolvedValue(trailingBlock);
+
+    renderIssueDetail();
+
+    await waitFor(() => {
+      expect(screen.getByText("8 activities")).toBeInTheDocument();
+    });
+    // Every one of the 8 entries should be visible — the trailing block fits
+    // exactly within the limit, so no "Show N more activities" line appears.
+    expect(screen.getByText(/from Todo to In Progress/i)).toBeInTheDocument();
+    expect(screen.getByText(/from Low to High/i)).toBeInTheDocument();
+    expect(screen.getByText(/from In Progress to In Review/i)).toBeInTheDocument();
+    expect(screen.getByText(/from High to Urgent/i)).toBeInTheDocument();
+    expect(screen.getByText(/from In Review to Done/i)).toBeInTheDocument();
+    expect(screen.getByText(/from Urgent to Low/i)).toBeInTheDocument();
+    expect(screen.getByText(/from Done to Blocked/i)).toBeInTheDocument();
+    expect(screen.getByText(/set due date to/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Show \d+ more activit/i)).not.toBeInTheDocument();
+  });
+
+  it("expanding a non-trailing block shows every entry — only the trailing block truncates older ones", async () => {
+    // Non-trailing block (10 activities) + comment + trailing block (1 activity).
+    // Manually expanding the older block must reveal all 10 entries — the
+    // truncate-to-8 rule applies only to the trailing block.
+    const timeline: TimelineEntry[] = [
+      { type: "activity", id: "old-1", actor_type: "member", actor_id: "user-1", action: "status_changed", details: { from: "backlog", to: "todo" }, created_at: "2026-01-16T00:00:00Z" },
+      { type: "activity", id: "old-2", actor_type: "member", actor_id: "user-1", action: "priority_changed", details: { from: "none", to: "low" }, created_at: "2026-01-16T00:01:00Z" },
+      { type: "activity", id: "old-3", actor_type: "member", actor_id: "user-1", action: "status_changed", details: { from: "todo", to: "in_progress" }, created_at: "2026-01-16T00:02:00Z" },
+      { type: "activity", id: "old-4", actor_type: "member", actor_id: "user-1", action: "priority_changed", details: { from: "low", to: "medium" }, created_at: "2026-01-16T00:03:00Z" },
+      { type: "activity", id: "old-5", actor_type: "member", actor_id: "user-1", action: "status_changed", details: { from: "in_progress", to: "in_review" }, created_at: "2026-01-16T00:04:00Z" },
+      { type: "activity", id: "old-6", actor_type: "member", actor_id: "user-1", action: "priority_changed", details: { from: "medium", to: "high" }, created_at: "2026-01-16T00:05:00Z" },
+      { type: "activity", id: "old-7", actor_type: "member", actor_id: "user-1", action: "status_changed", details: { from: "in_review", to: "done" }, created_at: "2026-01-16T00:06:00Z" },
+      { type: "activity", id: "old-8", actor_type: "member", actor_id: "user-1", action: "priority_changed", details: { from: "high", to: "urgent" }, created_at: "2026-01-16T00:07:00Z" },
+      { type: "activity", id: "old-9", actor_type: "member", actor_id: "user-1", action: "status_changed", details: { from: "done", to: "blocked" }, created_at: "2026-01-16T00:08:00Z" },
+      { type: "activity", id: "old-10", actor_type: "member", actor_id: "user-1", action: "priority_changed", details: { from: "urgent", to: "low" }, created_at: "2026-01-16T00:09:00Z" },
+      {
+        type: "comment", id: "comment-mid", actor_type: "member", actor_id: "user-1",
+        content: "Splitting the blocks", parent_id: null,
+        created_at: "2026-01-17T00:00:00Z", updated_at: "2026-01-17T00:00:00Z",
+        comment_type: "comment",
+      },
+      { type: "activity", id: "last-1", actor_type: "member", actor_id: "user-1", action: "due_date_changed", details: { to: "2026-02-01T00:00:00Z" }, created_at: "2026-01-18T00:00:00Z" },
+    ] as TimelineEntry[];
+    mockApiObj.listTimeline.mockResolvedValue(timeline);
+
+    renderIssueDetail();
+
+    // The older block defaults to collapsed; its summary reports 10.
+    await waitFor(() => {
+      expect(screen.getByText("10 activities")).toBeInTheDocument();
+    });
+    // None of the older entries are rendered before expansion.
+    expect(screen.queryByText(/from Backlog to Todo/i)).not.toBeInTheDocument();
+
+    // Expand the older block by clicking its summary line.
+    fireEvent.click(screen.getByText("10 activities"));
+
+    // Every one of the 10 entries should now be visible — even though the
+    // block has more than 8 entries, the truncate-to-8 rule does not apply
+    // to non-trailing blocks, so no "Show N more activities" line appears.
+    await waitFor(() => {
+      expect(screen.getByText(/from Backlog to Todo/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/from No priority to Low/i)).toBeInTheDocument();
+    expect(screen.getByText(/from Todo to In Progress/i)).toBeInTheDocument();
+    expect(screen.getByText(/from Low to Medium/i)).toBeInTheDocument();
+    expect(screen.getByText(/from In Progress to In Review/i)).toBeInTheDocument();
+    expect(screen.getByText(/from Medium to High/i)).toBeInTheDocument();
+    expect(screen.getByText(/from In Review to Done/i)).toBeInTheDocument();
+    expect(screen.getByText(/from High to Urgent/i)).toBeInTheDocument();
+    expect(screen.getByText(/from Done to Blocked/i)).toBeInTheDocument();
+    expect(screen.getByText(/from Urgent to Low/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Show \d+ more activit/i)).not.toBeInTheDocument();
   });
 
   describe("highlightCommentId scroll-to-comment", () => {

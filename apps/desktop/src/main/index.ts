@@ -1,15 +1,23 @@
-import { app, BrowserWindow, ipcMain, nativeImage, Notification } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, Notification } from "electron";
 import { homedir } from "os";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import fixPath from "fix-path";
 import { setupAutoUpdater } from "./updater";
 import { setupDaemonManager } from "./daemon-manager";
+import { setupLocalDirectory } from "./local-directory";
 import { openExternalSafely, downloadURLSafely } from "./external-url";
 import { installContextMenu } from "./context-menu";
+import { handleAppShortcut } from "./keyboard-shortcuts";
+import { installNavigationGestures } from "./navigation-gestures";
 import { getAppVersion } from "./app-version";
 import { loadRuntimeConfig } from "./runtime-config-loader";
 import type { RuntimeConfigResult } from "../shared/runtime-config";
+import {
+  createElectronReloadPrompt,
+  installRendererRecoveryHandlers,
+  type RendererRecoveryWindow,
+} from "./renderer-recovery";
 
 // Bundled icon used for dock/taskbar branding. macOS/Windows production
 // builds let the OS pick up the icon from the .app bundle / .exe resources,
@@ -189,23 +197,63 @@ function createWindow(): void {
     return { action: "deny" };
   });
 
-  // Prevent Cmd+R / Ctrl+R / Shift+Cmd+R / Shift+Ctrl+R / F5 from
-  // reloading the page. In a desktop app an accidental reload destroys
-  // in-memory state (tabs, drafts, WS connections) with no URL bar to
-  // navigate back. DevTools refresh (via the DevTools UI) still works.
-  mainWindow.webContents.on("before-input-event", (_event, input) => {
-    if (input.type !== "keyDown") return;
-    const cmdOrCtrl =
-      process.platform === "darwin" ? input.meta : input.control;
-    if (
-      (cmdOrCtrl && input.key.toLowerCase() === "r") ||
-      input.key === "F5"
-    ) {
-      _event.preventDefault();
+  // Window-level keyboard shortcuts. Calling preventDefault here prevents
+  // both the renderer keydown AND the application menu accelerator, so
+  // anything we own here (reload-block, zoom) is the sole handler for
+  // that combination — no double-fire with the macOS default View menu.
+  mainWindow.webContents.on("before-input-event", (event, input) => {
+    if (handleAppShortcut(input, mainWindow!.webContents)) {
+      event.preventDefault();
     }
   });
 
+  // Dev-mode renderer diagnostics. When the renderer crashes hard enough
+  // that DevTools can't be opened (white screen with no clickable surface),
+  // the only way to recover the actual JS error is to forward it from the
+  // main process to the terminal running `make dev`. Without these, the
+  // user sees only the daemon-manager polling noise (`Render frame was
+  // disposed before WebFrameMain could be accessed`) which is a downstream
+  // symptom, not the cause.
+  //
+  // Gated by `is.dev` to keep production stderr clean — packaged builds
+  // don't have a terminal anyway, and we ship to crash-reporting separately.
+  if (is.dev) {
+    const log = (tag: string, ...args: unknown[]) =>
+      process.stderr.write(`[renderer ${tag}] ${args.map(String).join(" ")}\n`);
+
+    // Forward every renderer-side console.* call. The detail object also
+    // carries source URL + line — included so a thrown stack trace from
+    // window.onerror is traceable back to a file.
+    mainWindow.webContents.on("console-message", (details) => {
+      const { level, message, sourceId, lineNumber } = details;
+      log(level, `${message} (${sourceId}:${lineNumber})`);
+    });
+
+    // Fires when loadURL / loadFile can't reach its target (dev server
+    // not up yet, network blip, file missing). errorCode is a Chromium
+    // net error number; -3 = ABORTED is normal during HMR and skipped.
+    mainWindow.webContents.on(
+      "did-fail-load",
+      (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+        if (errorCode === -3) return;
+        log(
+          "did-fail-load",
+          `code=${errorCode} desc=${errorDescription} url=${validatedURL} mainFrame=${isMainFrame}`,
+        );
+      },
+    );
+
+  }
+
+  installRendererRecoveryHandlers(mainWindow as unknown as RendererRecoveryWindow, {
+    isDev: is.dev,
+    showReloadPrompt: createElectronReloadPrompt((options) =>
+      dialog.showMessageBox(mainWindow!, options),
+    ),
+  });
+
   installContextMenu(mainWindow.webContents);
+  installNavigationGestures(mainWindow);
 
   if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
     mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
@@ -412,6 +460,7 @@ if (!gotTheLock) {
 
     setupAutoUpdater(() => mainWindow);
     setupDaemonManager(() => mainWindow);
+    setupLocalDirectory(() => mainWindow);
 
     // macOS: deep link arrives via open-url event
     app.on("open-url", (_event, url) => {
