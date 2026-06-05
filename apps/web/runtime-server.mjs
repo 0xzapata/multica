@@ -14,7 +14,7 @@ if (publicPort === nextPort) {
   process.exit(1);
 }
 
-const backendUrl = parseRemoteApiUrl(process.env.REMOTE_API_URL);
+const backendUrl = parseRemoteApiUrl(process.env.REMOTE_API_URL || "http://backend:8080");
 const nextUrl = new URL(`http://${nextHost}:${nextPort}`);
 
 const nextServer = spawn(process.execPath, ["apps/web/server.js"], {
