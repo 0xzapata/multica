@@ -312,12 +312,17 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Wait for daemon workflow check
-        uses: fountainhead/action-wait-for-check@v1.3.0
+        uses: fountainhead/action-wait-for-check@v1.2.0
         with:
           token: ${{ secrets.GHCR_DAEMON_TOKEN }}
-          checkName: "Build and Push to GHCR"
-          ref: main
-          timeout: 1800
+          # Wait for the daemon repo's `build-and-push` job to finish.
+          # The action requires a *Job* name, not a Workflow name, and
+          # we point it at the daemon repo (not the current repo).
+          checkName: build-and-push
+          owner: 0xzapata
+          repo: multica-daemon
+          ref: master
+          timeoutSeconds: 1800
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
