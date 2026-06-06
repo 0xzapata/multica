@@ -65,12 +65,9 @@ jobs:
 
   release:
     needs: verify
-    # Only run on the canonical upstream repo. Forks don't have the
-    # HOMEBREW_TAP_GITHUB_TOKEN secret and should not be publishing to
-    # `multica-ai/homebrew-tap` anyway. Without this guard, every fork's
-    # tag push fails this job (401 against the upstream tap), which makes
-    # downstream CI go red without affecting the actual artifact pipeline.
-    if: github.repository_owner == 'multica-ai'
+    # Runs on forks too — the GoReleaser step itself is gated on the
+    # presence of HOMEBREW_TAP_GITHUB_TOKEN so the homebrew-tap publish
+    # is silently skipped on forks that don't have the secret wired in.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -86,6 +83,9 @@ jobs:
           cache-dependency-path: server/go.sum
 
       - name: Run GoReleaser
+        # Skip the homebrew-tap publish step on forks by gating the entire
+        # job on the secret's presence. Empty/absent secret = fork = no-op.
+        if: env.HOMEBREW_TAP_GITHUB_TOKEN != ''
         uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
@@ -337,7 +337,9 @@ jobs:
 
   helm-chart:
     needs: [verify, docker-backend-merge, docker-web-merge]
-    if: github.repository_owner == 'multica-ai'
+    # Runs on forks too — the upstream OCI chart registry is
+    # ghcr.io/<owner>/charts, so a fork push simply publishes into the
+    # fork's own chart namespace, which is harmless.
     runs-on: ubuntu-latest
     concurrency:
       group: release-helm-chart-${{ github.ref }}
