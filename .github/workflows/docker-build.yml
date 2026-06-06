@@ -300,10 +300,13 @@ jobs:
           echo "Dispatched zeabur-build to 0xzapata/multica-daemon"
 
   # ── tag-sync ───────────────────────────────────────────────────────
-  # Wait for the daemon workflow to finish, then promote all three
-  # images to `latest`. If the daemon workflow failed or was skipped,
-  # this job fails and `latest` stays on the previous good build —
-  # operators can still pin to zeabur-<sha> on the web/backend side.
+  # Wait for the daemon's zeabur-<sha> tag to exist in GHCR, then
+  # promote all three images to `latest`. Polling GHCR for the tag
+  # itself is more reliable than waiting on a check run: it correctly
+  # attributes the build to *this* dispatch (a previous run's check
+  # could fool action-wait-for-check into returning success), and
+  # works even if the daemon's master branch is unchanged and
+  # re-dispatched with a new SHA.
   tag-sync:
     needs: [meta, docker-web-merge, docker-backend-merge, trigger-daemon]
     runs-on: ubuntu-latest
@@ -311,18 +314,24 @@ jobs:
       group: zeabur-tag-sync-${{ github.ref }}
       cancel-in-progress: false
     steps:
-      - name: Wait for daemon workflow check
-        uses: fountainhead/action-wait-for-check@v1.2.0
-        with:
-          token: ${{ secrets.GHCR_DAEMON_TOKEN }}
-          # Wait for the daemon repo's `build-and-push` job to finish.
-          # The action requires a *Job* name, not a Workflow name, and
-          # we point it at the daemon repo (not the current repo).
-          checkName: build-and-push
-          owner: 0xzapata
-          repo: multica-daemon
-          ref: master
-          timeoutSeconds: 1800
+      - name: Wait for daemon image to appear
+        env:
+          GH_TOKEN: ${{ secrets.GHCR_DAEMON_TOKEN }}
+          SHA: ${{ needs.meta.outputs.sha }}
+        run: |
+          tag="zeabur-${SHA}"
+          for i in $(seq 1 180); do
+            if gh api "/users/0xzapata/packages/container/multica-daemon/versions" \
+                --jq '.[] | select(.metadata.container.tags | index(env.tag)) | .id' \
+                | grep -q .; then
+              echo "Daemon image ${tag} is available"
+              exit 0
+            fi
+            echo "[$i/180] Daemon image ${tag} not yet available, sleeping 10s"
+            sleep 10
+          done
+          echo "::error::Timed out waiting for daemon image ${tag}"
+          exit 1
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
