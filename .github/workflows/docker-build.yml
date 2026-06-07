@@ -320,7 +320,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GHCR_DAEMON_TOKEN }}
           SHA: ${{ needs.meta.outputs.sha }}
         run: |
-          tag="zeabur-${SHA}"
+          export tag="zeabur-${SHA}"
           for i in $(seq 1 180); do
             if gh api "/users/0xzapata/packages/container/multica-daemon/versions" \
                 --jq '.[] | select(.metadata.container.tags | index(env.tag)) | .id' \
