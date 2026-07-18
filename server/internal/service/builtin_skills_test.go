@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/multica-ai/multica/server/internal/util"
+	"gopkg.in/yaml.v3"
 )
 
 // Built-in skills are the platform's standard "template" skills. These evals
@@ -68,6 +69,51 @@ func TestBuiltinSkillsConformToTemplate(t *testing.T) {
 				if strings.Contains(lower, "eval") || strings.HasSuffix(lower, "_test.go") || strings.HasSuffix(lower, "_test.md") {
 					t.Errorf("supporting file %q looks like an eval/test; evals belong in _test.go, not the shipped skill payload", f.Path)
 				}
+			}
+		})
+	}
+}
+
+// TestBuiltinSkillsFrontmatterIsStrictYAML is the regression guard for MUL-3100
+// / GitHub #3851: a built-in SKILL.md whose frontmatter is not valid YAML 1.2
+// (the canonical break is an unquoted `: ` inside the description) is silently
+// dropped by strict runtimes like Codex, so the agent runs without that
+// platform-contract skill.
+//
+// This check is deliberately separate from TestBuiltinSkillsConformToTemplate:
+// that test reads the frontmatter through splitFrontmatter, a naive line parser
+// that splits on the first ':' and never runs a YAML parse — so it passes even
+// on the broken files. Only a real yaml.Unmarshal reproduces what Codex does,
+// which is exactly what is needed to catch this class of bug before it ships.
+func TestBuiltinSkillsFrontmatterIsStrictYAML(t *testing.T) {
+	skills := loadBuiltinSkills()
+	if len(skills) == 0 {
+		t.Fatal("no built-in skills loaded; embed or layout is broken")
+	}
+
+	for _, skill := range skills {
+		t.Run(skill.Name, func(t *testing.T) {
+			content := skill.Content
+			if !strings.HasPrefix(content, "---\n") {
+				t.Fatalf("SKILL.md must lead with a --- frontmatter block")
+			}
+			rest := content[len("---\n"):]
+			end := strings.Index(rest, "\n---")
+			if end < 0 {
+				t.Fatalf("frontmatter has no closing --- delimiter")
+			}
+
+			var fm map[string]any
+			if err := yaml.Unmarshal([]byte(rest[:end]), &fm); err != nil {
+				t.Fatalf("frontmatter is not valid YAML — a strict runtime (e.g. Codex) "+
+					"will drop this skill on load; quote values containing ': ': %v", err)
+			}
+
+			if name, ok := fm["name"].(string); !ok || strings.TrimSpace(name) == "" {
+				t.Errorf("frontmatter name must parse as a non-empty string, got %#v", fm["name"])
+			}
+			if desc, ok := fm["description"].(string); !ok || strings.TrimSpace(desc) == "" {
+				t.Errorf("frontmatter description must parse as a non-empty string, got %#v", fm["description"])
 			}
 		})
 	}
@@ -230,6 +276,13 @@ func TestSkillImportingSkillCoversWorkspaceImportContracts(t *testing.T) {
 		"skills.sh",
 		"github.com",
 		"config.origin",
+		"--on-conflict fail",
+		"--on-conflict overwrite",
+		"--on-conflict rename",
+		"--on-conflict skip",
+		"status",
+		"conflict",
+		"skipped",
 		"409",
 		"existing_skill",
 		"id",
@@ -412,6 +465,7 @@ func TestRuntimesAndReposSkillCoversClaimAndCheckoutChain(t *testing.T) {
 		"multica runtime list --output json",
 		"multica repo checkout <url>",
 		"MULTICA_DAEMON_PORT",
+		"resource_ref.ref",
 		"github_repo",
 		"local_directory",
 		"Runtime and repo commands affect active agent execution",
@@ -446,9 +500,11 @@ func TestProjectsAndResourcesSkillCoversDurableContext(t *testing.T) {
 		".multica/project/resources.json",
 		"multica project resource list <project-id> --output json",
 		"multica project resource add <project-id> --type github_repo --url <github-url> --output json",
+		"multica project resource add <project-id> --type github_repo --url <github-url> --ref <branch-or-sha> --output json",
 		"multica project resource add <project-id> --type local_directory",
 		"Project resources are durable and affect future tasks",
 		"github_repo.resource_ref.url",
+		"resource_ref.ref",
 		"references/projects-and-resources-source-map.md",
 	}
 	for _, want := range mustContain {

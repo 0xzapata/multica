@@ -3,6 +3,7 @@ package lark
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -27,6 +28,8 @@ type larkFakeServer struct {
 	sendN   atomic.Int32
 	patchN  atomic.Int32
 	bindN   atomic.Int32
+	reactN  atomic.Int32
+	delRN   atomic.Int32
 	authObs atomic.Value // last Authorization header seen across all paths
 }
 
@@ -104,6 +107,34 @@ func (f *larkFakeServer) stubSend(resp map[string]any, verify func(r *http.Reque
 	})
 }
 
+// stubReply installs the IM-reply endpoint
+// (POST /open-apis/im/v1/messages/<id>/reply), used by the thread-reply
+// path. Body is decoded as map[string]any because reply_in_thread is a
+// bool. Register stubToken + stubReply (and not stubSend / stubPatch) in
+// a reply test, since they share the /messages/ prefix.
+func (f *larkFakeServer) stubReply(resp map[string]any, verify func(r *http.Request, id string, body map[string]any)) {
+	const prefix = "/open-apis/im/v1/messages/"
+	f.mux.HandleFunc(prefix, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || !strings.HasSuffix(r.URL.Path, "/reply") {
+			f.t.Errorf("reply: want POST .../reply, got %s %s", r.Method, r.URL.Path)
+			return
+		}
+		f.sendN.Add(1)
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, prefix), "/reply")
+		if id == "" {
+			f.t.Errorf("reply: missing message id")
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			f.t.Errorf("reply: decode body: %v", err)
+		}
+		if verify != nil {
+			verify(r, id, body)
+		}
+		writeJSON(w, resp)
+	})
+}
+
 // stubPatch installs the IM-patch endpoint. The Lark route is
 // /open-apis/im/v1/messages/<id>; ServeMux uses prefix matching when
 // we register the parent path explicitly. We register the parent
@@ -125,6 +156,58 @@ func (f *larkFakeServer) stubPatch(resp map[string]any, verify func(r *http.Requ
 		}
 		if verify != nil {
 			verify(r, id, body)
+		}
+		writeJSON(w, resp)
+	})
+}
+
+// stubReaction installs the IM-reaction-create endpoint.
+func (f *larkFakeServer) stubReaction(resp map[string]any, verify func(r *http.Request, id string, body map[string]any)) {
+	const suffix = "/reactions"
+	f.mux.HandleFunc("/open-apis/im/v1/messages/", func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, suffix) {
+			return // let other handlers match
+		}
+		if r.Method != http.MethodPost {
+			f.t.Errorf("reaction: want POST, got %s", r.Method)
+		}
+		f.reactN.Add(1)
+		rawID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/open-apis/im/v1/messages/"), suffix)
+		if rawID == "" {
+			f.t.Errorf("reaction: missing message id")
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			f.t.Errorf("reaction: decode body: %v", err)
+		}
+		if verify != nil {
+			verify(r, rawID, body)
+		}
+		writeJSON(w, resp)
+	})
+}
+
+// stubReactionDelete installs the IM-reaction-delete endpoint.
+func (f *larkFakeServer) stubReactionDelete(resp map[string]any, verify func(r *http.Request, msgID string, reactionID string)) {
+	const prefix = "/open-apis/im/v1/messages/"
+	f.mux.HandleFunc(prefix, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			return // let other handlers match
+		}
+		rest := strings.TrimPrefix(r.URL.Path, prefix)
+		parts := strings.Split(rest, "/reactions/")
+		if len(parts) != 2 {
+			return // not a delete path
+		}
+		f.delRN.Add(1)
+		if parts[0] == "" {
+			f.t.Errorf("reaction delete: missing message id")
+		}
+		if parts[1] == "" {
+			f.t.Errorf("reaction delete: missing reaction id")
+		}
+		if verify != nil {
+			verify(r, parts[0], parts[1])
 		}
 		writeJSON(w, resp)
 	})
@@ -353,6 +436,62 @@ func TestHTTPClient_SendTextMessage_HappyPath(t *testing.T) {
 	}
 	if got := fake.lastAuth(); got != "Bearer tok_text" {
 		t.Errorf("Authorization header: got %q want Bearer tok_text", got)
+	}
+}
+
+// TestHTTPClient_SendTextMessage_ReplyInThread pins the wire shape of a
+// threaded reply: when ReplyTarget is set the client must POST to the
+// reply endpoint (/messages/<id>/reply), carry reply_in_thread=true, and
+// NOT include a chat-level receive_id — that's what lands the agent's
+// reply inside the originating 话题 (thread) instead of the group.
+func TestHTTPClient_SendTextMessage_ReplyInThread(t *testing.T) {
+	fake := newLarkFake(t)
+	fake.stubToken("tok_reply", 7200)
+	fake.stubReply(
+		map[string]any{
+			"code": 0,
+			"msg":  "ok",
+			"data": map[string]string{"message_id": "om_reply_1"},
+		},
+		func(r *http.Request, id string, body map[string]any) {
+			if id != "om_trigger" {
+				t.Errorf("reply target id: got %q want om_trigger", id)
+			}
+			if body["msg_type"] != "text" {
+				t.Errorf("msg_type: got %v want text", body["msg_type"])
+			}
+			if v, _ := body["reply_in_thread"].(bool); !v {
+				t.Errorf("reply_in_thread: got %v want true", body["reply_in_thread"])
+			}
+			if _, hasRecv := body["receive_id"]; hasRecv {
+				t.Errorf("reply endpoint body must NOT carry receive_id; got %v", body)
+			}
+			content, ok := body["content"].(string)
+			if !ok {
+				t.Fatalf("content missing or not a string: %v", body["content"])
+			}
+			var inner map[string]string
+			if err := json.Unmarshal([]byte(content), &inner); err != nil {
+				t.Fatalf("content inner JSON: %v (raw=%q)", err, content)
+			}
+			if inner["text"] != "threaded hi" {
+				t.Errorf("inner content.text: got %q want threaded hi", inner["text"])
+			}
+		},
+	)
+
+	c := newTestClient(fake, time.Now)
+	msgID, err := c.SendTextMessage(context.Background(), SendTextParams{
+		InstallationID: testCreds(),
+		ChatID:         ChatID("oc_chat_42"),
+		Text:           "threaded hi",
+		ReplyTarget:    ReplyTarget{MessageID: "om_trigger", InThread: true},
+	})
+	if err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	if msgID != "om_reply_1" {
+		t.Errorf("message id: got %q want om_reply_1", msgID)
 	}
 }
 
@@ -585,6 +724,70 @@ func TestHTTPClient_SendInteractiveCard_LarkErrorCode(t *testing.T) {
 	}
 }
 
+// TestHTTPClient_SendMethods_ReturnTypedAPIError pins that the three
+// send methods used for threaded replies surface a non-zero Lark code
+// as a structured *APIError, so the outbound fallback can classify
+// "topic cannot receive this reply" codes without string matching.
+func TestHTTPClient_SendMethods_ReturnTypedAPIError(t *testing.T) {
+	cases := []struct {
+		name string
+		call func(c *httpAPIClient) error
+	}{
+		{"interactive", func(c *httpAPIClient) error {
+			_, err := c.SendInteractiveCard(context.Background(), SendCardParams{InstallationID: testCreds(), ChatID: "oc", CardJSON: `{}`})
+			return err
+		}},
+		{"text", func(c *httpAPIClient) error {
+			_, err := c.SendTextMessage(context.Background(), SendTextParams{InstallationID: testCreds(), ChatID: "oc", Text: "hi"})
+			return err
+		}},
+		{"markdown", func(c *httpAPIClient) error {
+			_, err := c.SendMarkdownCard(context.Background(), SendMarkdownCardParams{InstallationID: testCreds(), ChatID: "oc", Markdown: "**hi**"})
+			return err
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := newLarkFake(t)
+			fake.stubToken("tok_e", 7200)
+			fake.stubSend(map[string]any{"code": 230071, "msg": "group does not support reply in thread"}, nil)
+			c := newTestClient(fake, time.Now)
+			err := tc.call(c)
+			var apiErr *APIError
+			if !errors.As(err, &apiErr) {
+				t.Fatalf("want *APIError, got %T (%v)", err, err)
+			}
+			if apiErr.Code != 230071 {
+				t.Errorf("APIError.Code = %d; want 230071", apiErr.Code)
+			}
+			if !isThreadReplyUnsupported(err) {
+				t.Errorf("230071 should classify as thread-reply-unsupported")
+			}
+			if !strings.Contains(err.Error(), "code=230071") {
+				t.Errorf("error string should preserve code=230071: %v", err)
+			}
+		})
+	}
+}
+
+// TestIsThreadReplyUnsupported_ExcludesAmbiguous guards that ambiguous
+// and rate-limit failures are NOT treated as classified thread errors,
+// so they never trigger a chat-level fallback.
+func TestIsThreadReplyUnsupported_ExcludesAmbiguous(t *testing.T) {
+	if isThreadReplyUnsupported(errors.New("transport failure")) {
+		t.Error("plain transport error must not classify as thread-reply-unsupported")
+	}
+	if isThreadReplyUnsupported(&APIError{Code: 230020, Msg: "rate limit"}) {
+		t.Error("rate limit (230020) must not classify as thread-reply-unsupported")
+	}
+	if isThreadReplyUnsupported(&APIError{Code: 230049, Msg: "message is being sent"}) {
+		t.Error("ambiguous 'being sent' (230049) must not classify as thread-reply-unsupported")
+	}
+	if !isThreadReplyUnsupported(&APIError{Code: 230072, Msg: "aggregated"}) {
+		t.Error("aggregated message (230072) should classify as thread-reply-unsupported")
+	}
+}
+
 func TestHTTPClient_SendInteractiveCard_TokenExpired_InvalidatesCache(t *testing.T) {
 	fake := newLarkFake(t)
 	fake.stubToken("tok_first", 7200)
@@ -719,6 +922,94 @@ func TestHTTPClient_TokenEndpointError(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "code=10003") {
 		t.Errorf("want code=10003 surfaced, got %v", err)
+	}
+}
+
+func TestHTTPClient_AddMessageReaction_HappyPath(t *testing.T) {
+	fake := newLarkFake(t)
+	fake.stubToken("tok_react", 7200)
+	fake.stubReaction(map[string]any{"code": 0, "msg": "ok", "data": map[string]string{"reaction_id": "re_42"}}, func(r *http.Request, id string, body map[string]any) {
+		if id != "om_user_msg_1" {
+			t.Errorf("message id: got %q want om_user_msg_1", id)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer tok_react" {
+			t.Errorf("Authorization=%q want Bearer tok_react", got)
+		}
+		reactionType, ok := body["reaction_type"].(map[string]any)
+		if !ok {
+			t.Fatalf("reaction_type missing or wrong shape: %v", body)
+		}
+		if got := reactionType["emoji_type"]; got != "Typing" {
+			t.Errorf("emoji_type=%v want Typing", got)
+		}
+	})
+
+	c := newTestClient(fake, time.Now)
+	reactionID, err := c.AddMessageReaction(context.Background(), AddReactionParams{
+		InstallationID: testCreds(),
+		MessageID:      "om_user_msg_1",
+		EmojiType:      "Typing",
+	})
+	if err != nil {
+		t.Fatalf("AddMessageReaction: %v", err)
+	}
+	if reactionID != "re_42" {
+		t.Errorf("reaction id: got %q want re_42", reactionID)
+	}
+	if got := fake.reactN.Load(); got != 1 {
+		t.Fatalf("reaction endpoint calls=%d want 1", got)
+	}
+}
+
+func TestHTTPClient_DeleteMessageReaction_HappyPath(t *testing.T) {
+	fake := newLarkFake(t)
+	fake.stubToken("tok_del", 7200)
+	fake.stubReactionDelete(map[string]any{"code": 0, "msg": "ok"}, func(r *http.Request, msgID string, reactionID string) {
+		if msgID != "om_user_msg_1" {
+			t.Errorf("message id: got %q want om_user_msg_1", msgID)
+		}
+		if reactionID != "re_42" {
+			t.Errorf("reaction id: got %q want re_42", reactionID)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer tok_del" {
+			t.Errorf("Authorization=%q want Bearer tok_del", got)
+		}
+	})
+
+	c := newTestClient(fake, time.Now)
+	if err := c.DeleteMessageReaction(context.Background(), DeleteReactionParams{
+		InstallationID: testCreds(),
+		MessageID:      "om_user_msg_1",
+		ReactionID:     "re_42",
+	}); err != nil {
+		t.Fatalf("DeleteMessageReaction: %v", err)
+	}
+	if got := fake.delRN.Load(); got != 1 {
+		t.Fatalf("reaction delete endpoint calls=%d want 1", got)
+	}
+}
+
+func TestHTTPClient_AddMessageReaction_Validation(t *testing.T) {
+	c := NewHTTPAPIClient(HTTPClientConfig{}).(*httpAPIClient)
+	_, err := c.AddMessageReaction(context.Background(), AddReactionParams{MessageID: "m"})
+	if err == nil || !strings.Contains(err.Error(), "missing emoji_type") {
+		t.Errorf("want missing emoji_type error, got %v", err)
+	}
+	_, err = c.AddMessageReaction(context.Background(), AddReactionParams{EmojiType: "Typing"})
+	if err == nil || !strings.Contains(err.Error(), "missing message_id") {
+		t.Errorf("want missing message_id error, got %v", err)
+	}
+}
+
+func TestHTTPClient_DeleteMessageReaction_Validation(t *testing.T) {
+	c := NewHTTPAPIClient(HTTPClientConfig{}).(*httpAPIClient)
+	err := c.DeleteMessageReaction(context.Background(), DeleteReactionParams{ReactionID: "re"})
+	if err == nil || !strings.Contains(err.Error(), "missing message_id") {
+		t.Errorf("want missing message_id error, got %v", err)
+	}
+	err = c.DeleteMessageReaction(context.Background(), DeleteReactionParams{MessageID: "m"})
+	if err == nil || !strings.Contains(err.Error(), "missing reaction_id") {
+		t.Errorf("want missing reaction_id error, got %v", err)
 	}
 }
 

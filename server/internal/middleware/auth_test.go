@@ -13,9 +13,12 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// newRedisTestClient connects to REDIS_TEST_URL, flushes, and skips when
-// unset — same gating pattern the rest of the suite uses for Redis-backed
-// tests, so `go test ./...` works on a stock laptop without a Redis.
+const redisTestDB = 13
+
+// newRedisTestClient connects to REDIS_TEST_URL, uses this package's logical
+// test DB, flushes, and skips when unset — same gating pattern the rest of the
+// suite uses for Redis-backed tests, so `go test ./...` works on a stock laptop
+// without a Redis.
 func newRedisTestClient(t *testing.T) *redis.Client {
 	t.Helper()
 	url := os.Getenv("REDIS_TEST_URL")
@@ -26,9 +29,7 @@ func newRedisTestClient(t *testing.T) *redis.Client {
 	if err != nil {
 		t.Fatalf("parse REDIS_TEST_URL: %v", err)
 	}
-	// Use a package-specific DB so `go test ./...` cannot have another
-	// package's Redis cleanup flush middleware auth cache entries mid-test.
-	opts.DB = 11
+	opts.DB = redisTestDB
 	rdb := redis.NewClient(opts)
 	ctx := context.Background()
 	if err := rdb.Ping(ctx).Err(); err != nil {
@@ -301,7 +302,6 @@ func TestAuth_PATCacheHit(t *testing.T) {
 		t.Fatalf("expected cached X-User-ID, got %q", gotUserID)
 	}
 }
-
 
 // TestAuth_MCN_NoVerifierConfigured pins the same fail-closed branch
 // as the daemon side: with no MULTICA_CLOUD_FLEET_URL configured, an

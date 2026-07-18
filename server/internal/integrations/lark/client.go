@@ -106,6 +106,16 @@ type APIClient interface {
 	// positional label. openIDs beyond Lark's 50-per-call cap are dropped
 	// by the client.
 	BatchGetUsers(ctx context.Context, creds InstallationCredentials, openIDs []string) (map[string]string, error)
+
+	// AddMessageReaction adds an emoji reaction to an existing message.
+	// The standard use-case is the "Typing" indicator that signals the
+	// Bot is processing the user's message. Returns the reaction_id Lark
+	// assigns so it can be removed later.
+	AddMessageReaction(ctx context.Context, p AddReactionParams) (string, error)
+
+	// DeleteMessageReaction removes a previously-added reaction from a
+	// message. This is the cleanup half of the typing-indicator lifecycle.
+	DeleteMessageReaction(ctx context.Context, p DeleteReactionParams) error
 }
 
 // ListMessagesParams selects a bounded, recent window of messages in a
@@ -188,7 +198,29 @@ type SendCardParams struct {
 	// through opaque so the card-template package can evolve without
 	// dragging this transport interface along.
 	CardJSON string
+	// ReplyTarget, when set, routes the send through Lark's reply
+	// endpoint (POST /im/v1/messages/{id}/reply) instead of the
+	// chat-level send endpoint, so the card lands inside the originating
+	// 话题 (thread). Empty ReplyTarget keeps the legacy chat-level send.
+	ReplyTarget ReplyTarget
 }
+
+// ReplyTarget describes how an outbound message should be threaded back
+// to an inbound message. When MessageID is non-empty the transport uses
+// Lark's reply endpoint targeting that message; InThread maps to the
+// reply_in_thread flag so the reply stays inside the message's topic.
+// The zero value (empty MessageID) means "send at the chat level" — the
+// historical behavior — so callers that don't care about threading just
+// leave it unset.
+type ReplyTarget struct {
+	MessageID string
+	InThread  bool
+}
+
+// IsSet reports whether this target should route through the reply
+// endpoint. A reply needs a parent message_id; without one there is
+// nothing to reply to and the caller falls back to a chat-level send.
+func (r ReplyTarget) IsSet() bool { return r.MessageID != "" }
 
 // PatchCardParams is the input shape for updating an existing card.
 type PatchCardParams struct {
@@ -204,6 +236,9 @@ type SendTextParams struct {
 	InstallationID InstallationCredentials
 	ChatID         ChatID
 	Text           string
+	// ReplyTarget threads the text reply back into a Lark topic; see
+	// ReplyTarget. Empty keeps the chat-level send.
+	ReplyTarget ReplyTarget
 }
 
 // SendMarkdownCardParams is the input shape for posting an agent
@@ -221,6 +256,9 @@ type SendMarkdownCardParams struct {
 	// Lark shows in the chat list / desktop notification. Empty falls
 	// back to whatever Lark derives from the body.
 	Summary string
+	// ReplyTarget threads the card reply back into a Lark topic; see
+	// ReplyTarget. Empty keeps the chat-level send.
+	ReplyTarget ReplyTarget
 }
 
 // BindingPromptParams carries the data needed to render and send the
@@ -231,6 +269,22 @@ type BindingPromptParams struct {
 	// BindURL is the absolute URL the user clicks. The token is
 	// embedded in the URL by the caller; the client never sees it.
 	BindURL string
+}
+
+// AddReactionParams is the input shape for adding an emoji reaction to
+// a message.
+type AddReactionParams struct {
+	InstallationID InstallationCredentials
+	MessageID      string
+	EmojiType      string
+}
+
+// DeleteReactionParams is the input shape for removing a previously-added
+// reaction from a message.
+type DeleteReactionParams struct {
+	InstallationID InstallationCredentials
+	MessageID      string
+	ReactionID     string
 }
 
 // InstallationCredentials is the per-installation transport context the
@@ -332,4 +386,14 @@ func (s *stubAPIClient) ListChatMessages(ctx context.Context, creds Installation
 func (s *stubAPIClient) BatchGetUsers(ctx context.Context, creds InstallationCredentials, openIDs []string) (map[string]string, error) {
 	s.log.Warn("lark stub client: BatchGetUsers called", "count", len(openIDs))
 	return nil, ErrAPIClientNotConfigured
+}
+
+func (s *stubAPIClient) AddMessageReaction(ctx context.Context, p AddReactionParams) (string, error) {
+	s.log.Warn("lark stub client: AddMessageReaction called", "message_id", p.MessageID, "emoji_type", p.EmojiType)
+	return "", ErrAPIClientNotConfigured
+}
+
+func (s *stubAPIClient) DeleteMessageReaction(ctx context.Context, p DeleteReactionParams) error {
+	s.log.Warn("lark stub client: DeleteMessageReaction called", "message_id", p.MessageID, "reaction_id", p.ReactionID)
+	return ErrAPIClientNotConfigured
 }
