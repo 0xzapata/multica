@@ -68,6 +68,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
 # Copy runtime proxy entrypoint
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/runtime-server.mjs ./apps/web/runtime-server.mjs
+# Ship the license and attribution notices with the image (LICENSE condition 1b)
+COPY --chown=nextjs:nodejs LICENSE NOTICE ./
 
 USER nextjs
 
