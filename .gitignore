@@ -79,3 +79,7 @@ data/
 graphify-out/
 .omc/
 .gstack/
+
+# Python (agent tooling)
+__pycache__/
+*.pyc
