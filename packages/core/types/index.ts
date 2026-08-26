@@ -1,4 +1,4 @@
-export type { Issue, IssueStatus, IssuePriority, IssueAssigneeType, IssueMetadata, IssueMetadataValue, IssueReaction } from "./issue";
+export type { Issue, IssueStatus, IssuePriority, IssueAssigneeType, IssueMetadata, IssueMetadataValue, IssueReaction, SourceContextAttachment, SourceContextAuthor, SourceContextIssueSnapshot, SourceContextCommentSnapshot, SourceContextSnapshot, SourceContextLimitUsage, SourceContextPreview, SourceContextAuthorState, IssueSourceContext } from "./issue";
 export type {
   IssueStatusCategory,
   IssueStatusEntry,
@@ -8,6 +8,7 @@ export type {
 } from "./issue-status";
 export type {
   Agent,
+  AgentConversationStarter,
   AgentStatus,
   AgentRuntimeMode,
   AgentVisibility,
@@ -98,7 +99,7 @@ export type {
   PluginPackage,
   PluginPackageVersion,
   PluginPackageListResponse,
-  PluginSurfaceScript,
+  PluginSurfaceLaunch,
   PluginPreview,
   PluginPreviewRequest,
   PluginInstallRequest,
@@ -311,6 +312,7 @@ export type {
   WorkspaceSubscriptionInterval,
   WorkspaceSubscriptionEntitlements,
   WorkspaceSubscriptionSummary,
+  WorkspaceSeatCapacity,
   WorkspaceSeatPurchaseSummary,
   WorkspaceSubscriptionPrice,
   WorkspaceSubscriptionPrices,
