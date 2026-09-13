@@ -83,3 +83,4 @@ graphify-out/
 # Python (agent tooling)
 __pycache__/
 *.pyc
+perf-report/
