@@ -3,10 +3,9 @@ name: Docker Build — Zeabur
 # Unified multi-image build for the Zeabur deployment branch.
 
 # Builds web + backend natively for amd64/arm64, dispatches the daemon
-# repo to build its image with the same zeabur-<sha> tag, and then a
-# tag-sync job waits for the daemon workflow check before promoting
-# all three images to `latest`. Atomic: if any step fails, `latest`
-# stays on the previous known-good build.
+# repo to build its image with the same zeabur-<sha> tag. Web and backend
+# publish `latest` independently after their own multi-arch builds succeed.
+# The tag-sync job waits for the daemon image before promoting only daemon.
 
 on:
   push:
@@ -177,8 +176,7 @@ jobs:
 
   # ── merge-web ───────────────────────────────────────────────────────
   # Combine the per-arch digests into a single manifest list and pin
-  # the zeabur-<sha> tag. `latest` is set later by the tag-sync job
-  # only after the daemon image has been built successfully.
+  # the zeabur-<sha> and latest tags independently of backend and daemon.
   docker-web-merge:
     needs: [meta, docker-web-build]
     runs-on: ubuntu-latest
@@ -205,6 +203,7 @@ jobs:
             latest=false
           tags: |
             type=raw,value=${{ needs.meta.outputs.tag }}
+            type=raw,value=latest
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -252,6 +251,7 @@ jobs:
             latest=false
           tags: |
             type=raw,value=${{ needs.meta.outputs.tag }}
+            type=raw,value=latest
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -302,7 +302,7 @@ jobs:
 
   # ── tag-sync ───────────────────────────────────────────────────────
   # Wait for the daemon's zeabur-<sha> tag to exist in GHCR, then
-  # promote all three images to `latest`. Polling GHCR for the tag
+  # promote only the daemon image to `latest`. Polling GHCR for the tag
   # itself is more reliable than waiting on a check run: it correctly
   # attributes the build to *this* dispatch (a previous run's check
   # could fool action-wait-for-check into returning success), and
@@ -344,29 +344,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Promote web to latest
-        run: |
-          docker buildx imagetools create \
-            -t ghcr.io/${{ github.repository_owner }}/multica-web:latest \
-            ghcr.io/${{ github.repository_owner }}/multica-web:${{ needs.meta.outputs.tag }}
-
-      - name: Promote backend to latest
-        run: |
-          docker buildx imagetools create \
-            -t ghcr.io/${{ github.repository_owner }}/multica-backend:latest \
-            ghcr.io/${{ github.repository_owner }}/multica-backend:${{ needs.meta.outputs.tag }}
-
       - name: Promote daemon to latest
         run: |
           docker buildx imagetools create \
             -t ghcr.io/${{ github.repository_owner }}/multica-daemon:latest \
             ghcr.io/${{ github.repository_owner }}/multica-daemon:${{ needs.meta.outputs.tag }}
 
-      - name: Inspect promoted images
+      - name: Inspect promoted daemon image
         run: |
-          docker buildx imagetools inspect \
-            ghcr.io/${{ github.repository_owner }}/multica-web:latest
-          docker buildx imagetools inspect \
-            ghcr.io/${{ github.repository_owner }}/multica-backend:latest
           docker buildx imagetools inspect \
             ghcr.io/${{ github.repository_owner }}/multica-daemon:latest
