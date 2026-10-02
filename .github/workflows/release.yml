@@ -18,6 +18,12 @@ permissions:
   contents: write
   packages: write
 
+# Deleting and recreating a tag can enqueue multiple runs for the same ref.
+# Serialize them so publishers never race while replacing same-name assets.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -57,20 +63,37 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: server/go.mod
+          # Deliberately independent from the minimum patch in server/go.mod:
+          # releases follow the newest 1.26 patch available to setup-go.
+          go-version: "1.26.x"
+          check-latest: true
           cache-dependency-path: server/go.sum
 
+      - name: Record Go toolchain
+        run: go version
+
+      - name: Verify Go test wrapper
+        run: bash scripts/test-go.test.sh
+
       - name: Run tests
-        run: cd server && go test ./...
+        run: bash scripts/test-go.sh --race
+
+      - name: Scan Go vulnerabilities
+        # Fail closed unless an administrator scopes the documented emergency
+        # override to this exact tag. See .github/RELEASING.md.
+        if: ${{ vars.ALLOW_VULN_BYPASS_FOR_TAG != github.ref_name }}
+        working-directory: server
+        run: go tool govulncheck ./...
+
+      - name: Record emergency vulnerability-scan bypass
+        if: ${{ vars.ALLOW_VULN_BYPASS_FOR_TAG == github.ref_name }}
+        run: echo "::warning::govulncheck was explicitly skipped for ${GITHUB_REF_NAME}; see .github/RELEASING.md"
 
   release:
     needs: verify
-    # Only run on the canonical upstream repo. Forks don't have the
-    # HOMEBREW_TAP_GITHUB_TOKEN secret and should not be publishing to
-    # `multica-ai/homebrew-tap` anyway. Without this guard, every fork's
-    # tag push fails this job (401 against the upstream tap), which makes
-    # downstream CI go red without affecting the actual artifact pipeline.
-    if: github.repository_owner == 'multica-ai'
+    # Runs on forks too — the GoReleaser step itself is gated on the
+    # presence of HOMEBREW_TAP_GITHUB_TOKEN so the homebrew-tap publish
+    # is silently skipped on forks that don't have the secret wired in.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -82,10 +105,19 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: server/go.mod
+          # Deliberately independent from the minimum patch in server/go.mod:
+          # releases follow the newest 1.26 patch available to setup-go.
+          go-version: "1.26.x"
+          check-latest: true
           cache-dependency-path: server/go.sum
 
+      - name: Record Go toolchain
+        run: go version
+
       - name: Run GoReleaser
+        # Skip the homebrew-tap publish step on forks by gating the entire
+        # job on the secret's presence. Empty/absent secret = fork = no-op.
+        if: env.HOMEBREW_TAP_GITHUB_TOKEN != ''
         uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
@@ -337,7 +369,9 @@ jobs:
 
   helm-chart:
     needs: [verify, docker-backend-merge, docker-web-merge]
-    if: github.repository_owner == 'multica-ai'
+    # Runs on forks too — the upstream OCI chart registry is
+    # ghcr.io/<owner>/charts, so a fork push simply publishes into the
+    # fork's own chart namespace, which is harmless.
     runs-on: ubuntu-latest
     concurrency:
       group: release-helm-chart-${{ github.ref }}
@@ -406,8 +440,14 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: server/go.mod
+          # Deliberately independent from the minimum patch in server/go.mod:
+          # releases follow the newest 1.26 patch available to setup-go.
+          go-version: "1.26.x"
+          check-latest: true
           cache-dependency-path: server/go.sum
+
+      - name: Record Go toolchain
+        run: go version
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -427,6 +467,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # electron-builder's GitHub publisher reads this:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Same-tag reruns must also replace Desktop assets after the
+          # publisher's default two-hour safety window has elapsed.
+          EP_GH_IGNORE_TIME: "true"
           # Disable code signing on Linux/Windows for now — the public
           # release is unsigned for these platforms, the CLI carries the
           # trust boundary. Set CSC_LINK in repo secrets to enable
