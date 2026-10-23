@@ -1058,6 +1058,8 @@ func (s *AutopilotService) dispatchRunOnly(ctx context.Context, ap db.Autopilot,
 	if err != nil {
 		return fmt.Errorf("create autopilot task: %w", err)
 	}
+	// Only a manual "run now" carries HumanAction; schedule/webhook fires do not.
+	s.TaskSvc.RecordHumanDelegation(ctx, autopilotAttr)
 
 	// Update run with task reference.
 	updatedRun, err := s.Queries.UpdateAutopilotRunRunning(ctx, db.UpdateAutopilotRunRunningParams{
@@ -1165,13 +1167,10 @@ func (s *AutopilotService) SyncRunFromTask(ctx context.Context, task db.AgentTas
 		s.captureAutopilotRunCompleted(autopilot, updatedRun)
 		s.publishRunDone(wsID, updatedRun, "completed")
 	case "failed", "cancelled":
-		reason := "task " + task.Status
-		if task.Error.Valid {
-			reason = task.Error.String
-		}
+		reason := taskFailureReasonForAutopilotRun(task)
 		updatedRun, err := s.failAutopilotRun(ctx, db.UpdateAutopilotRunFailedParams{
 			ID:            run.ID,
-			FailureReason: pgtype.Text{String: reason, Valid: true},
+			FailureReason: pgtype.Text{String: reason, Valid: reason != ""},
 		})
 		if err != nil {
 			slog.Warn("failed to fail autopilot run from task", "run_id", util.UUIDToString(run.ID), "error", err)
