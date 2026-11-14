@@ -1,0 +1,27 @@
+name: Verify Actions Lock
+
+on:
+  push:
+    branches: [main, zeabur]
+    paths: [.github/**]
+  pull_request:
+    branches: [main]
+    paths: [.github/**]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actions-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.1.0
+        with:
+          persist-credentials: false
+      - name: Verify locked actions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh extension install github/gh-actions-lock --pin v0.4.1
+          gh actions-lock --verify --ignore-local-actions

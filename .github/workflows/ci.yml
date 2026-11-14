@@ -34,10 +34,10 @@ jobs:
       full: ${{ steps.decide.outputs.full }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.1.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v6.5.0
         with:
           node-version: 22
 
@@ -50,7 +50,7 @@ jobs:
       - name: Filter paths
         id: filter
         if: github.event_name == 'pull_request' || github.event_name == 'push'
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v3.0.4
         with:
           # Pushes compare before/head SHAs. PRs use the pull-request file API;
           # paths-filter ignores base/ref for pull_request events.
@@ -71,10 +71,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.1.0
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v5.6.0
         with:
           go-version: "~1.27.4"
           check-latest: true
@@ -107,13 +107,13 @@ jobs:
       TURBO_CACHE_DIR: .turbo/cache
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.1.0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v4.3.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v6.5.0
         with:
           node-version: 22
           cache: pnpm
@@ -137,7 +137,7 @@ jobs:
       # GitHub scopes caches by branch: a PR reads main's entries (so unchanged
       # tasks hit on the first push) and writes its own (so re-pushes hit too).
       - name: Restore turbo cache
-        uses: actions/cache@v6
+        uses: actions/cache@v6.1.0
         with:
           path: .turbo/cache
           key: turbo-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.node }}-${{ github.sha }}
@@ -163,13 +163,13 @@ jobs:
       TURBO_CACHE_DIR: .turbo/cache
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.1.0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v4.3.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v6.5.0
         with:
           node-version: 22
           cache: pnpm
@@ -186,7 +186,7 @@ jobs:
       # logs rather than artifacts -- yet a hit still skips the whole suite,
       # which is the single most expensive task in the graph.
       - name: Restore turbo cache
-        uses: actions/cache@v6
+        uses: actions/cache@v6.1.0
         with:
           path: .turbo/cache
           key: turbo-test-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.node }}-${{ github.sha }}
@@ -219,7 +219,7 @@ jobs:
       TURBO_CACHE_DIR: .turbo/cache
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.1.0
 
       - name: Report runner CPU
         run: |
@@ -227,10 +227,10 @@ jobs:
           lscpu
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v4.3.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v6.5.0
         with:
           node-version: 22
           cache: pnpm
@@ -247,7 +247,7 @@ jobs:
       # argument in the task hash, while dependency sources still flow through
       # turbo.json's hash-only `^cache-inputs` edge.
       - name: Restore turbo cache
-        uses: actions/cache@v6
+        uses: actions/cache@v6.1.0
         with:
           path: .turbo/cache
           key: turbo-views-test-${{ matrix.index }}-of-${{ matrix.total }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.node }}-${{ github.sha }}
@@ -263,7 +263,7 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.1.0
       - name: Check frontend job results
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
@@ -320,7 +320,7 @@ jobs:
     # Job-level filtering skips both services on unrelated changes.
     services:
       postgres:
-        image: pgvector/pgvector:pg17
+        image: pgvector/pgvector:pg17@sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd
         env:
           POSTGRES_DB: multica
           POSTGRES_USER: multica
@@ -333,7 +333,7 @@ jobs:
           --health-timeout 5s
           --health-retries 20
       redis:
-        image: redis:7-alpine
+        image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
         ports:
           - 6379:6379
         options: >-
@@ -351,11 +351,11 @@ jobs:
       GOFLAGS: -count=1
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.1.0
 
       - name: Setup Go
         id: go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v5.6.0
         with:
           # Keep the security floor even when the setup-go manifest lags;
           # continue accepting newer patches within Go 1.27.
@@ -364,7 +364,7 @@ jobs:
           cache: false
 
       - name: Restore Go module cache
-        uses: actions/cache@v6
+        uses: actions/cache@v6.1.0
         with:
           path: ~/go/pkg/mod
           key: go-mod-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('server/go.sum') }}
@@ -376,7 +376,7 @@ jobs:
         run: echo "prefix=go-build-race-${{ runner.os }}-${{ runner.arch }}-$ImageOS-${{ steps.go.outputs.go-version }}-" >> "$GITHUB_OUTPUT"
 
       - name: Restore Go build cache
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@v6.1.0
         with:
           path: ~/.cache/go-build
           key: ${{ steps.gocache.outputs.prefix }}${{ github.sha }}
@@ -429,7 +429,7 @@ jobs:
       # under a half-formed key.
       - name: Save Go build cache
         if: ${{ !cancelled() && github.event_name == 'push' && steps.gocache.outcome == 'success' }}
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@v6.1.0
         with:
           path: ~/.cache/go-build
           key: ${{ steps.gocache.outputs.prefix }}${{ github.sha }}
@@ -453,18 +453,18 @@ jobs:
       GOFLAGS: -count=1
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.1.0
 
       - name: Setup Go
         id: go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v5.6.0
         with:
           go-version: "~1.27.4"
           check-latest: true
           cache: false
 
       - name: Restore Go module cache
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@v6.1.0
         with:
           path: ~/go/pkg/mod
           key: go-mod-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('server/go.sum') }}
@@ -475,7 +475,7 @@ jobs:
         run: echo "prefix=go-build-race-${{ runner.os }}-${{ runner.arch }}-$ImageOS-${{ steps.go.outputs.go-version }}-" >> "$GITHUB_OUTPUT"
 
       - name: Restore Go build cache
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@v6.1.0
         with:
           path: ~/.cache/go-build
           key: ${{ steps.gocache.outputs.prefix }}${{ github.sha }}
@@ -492,10 +492,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.1.0
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v5.6.0
         with:
           # Keep the security floor even when the setup-go manifest lags;
           # continue accepting newer patches within Go 1.27.
@@ -514,7 +514,7 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.1.0
       - name: Check backend job results
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
@@ -531,10 +531,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.1.0
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v5.6.0
         with:
           # Keep the security floor even when the setup-go manifest lags;
           # continue accepting newer patches within Go 1.27.
@@ -811,8 +811,8 @@ jobs:
     if: ${{ needs.changes.outputs.full == 'true' }}
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6.1.0
+      - uses: actions/setup-go@v5.6.0
         with:
           go-version: "~1.27.4"
           check-latest: true
@@ -852,8 +852,8 @@ jobs:
     if: ${{ needs.changes.outputs.processtree == 'true' }}
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6.1.0
+      - uses: actions/setup-go@v5.6.0
         with:
           go-version: "~1.27.4"
           check-latest: true
@@ -873,7 +873,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.1.0
         with:
           fetch-depth: 1
 
@@ -905,7 +905,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.1.0
 
       - name: Test shell installers
         if: runner.os != 'Windows'
@@ -926,8 +926,8 @@ jobs:
     if: ${{ needs.changes.outputs.scripts == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v6.1.0
+      - uses: actions/setup-node@v6.5.0
         with:
           node-version: 22
 
@@ -966,7 +966,7 @@ jobs:
           git diff --exit-code -- packages/views/editor/utils/text-preview-whitelist.generated.ts
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v4.3.1
 
       - name: Test Helm chart
         run: bash scripts/helm-config.test.sh
@@ -982,9 +982,9 @@ jobs:
     if: ${{ needs.changes.outputs.quality_only == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v6.1.0
+      - uses: pnpm/action-setup@v4.3.0
+      - uses: actions/setup-node@v6.5.0
         with:
           node-version: 22
           cache: pnpm

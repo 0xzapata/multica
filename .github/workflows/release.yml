@@ -33,7 +33,7 @@ jobs:
       release_sha: ${{ steps.release_meta.outputs.release_sha }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.4.0
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
@@ -61,7 +61,7 @@ jobs:
           fi
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v5.6.0
         with:
           # Keep the security floor even when the setup-go manifest lags;
           # continue accepting newer patches within Go 1.27.
@@ -97,13 +97,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.4.0
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v5.6.0
         with:
           # Keep the security floor even when the setup-go manifest lags;
           # continue accepting newer patches within Go 1.27.
@@ -118,7 +118,7 @@ jobs:
         # Skip the homebrew-tap publish step on forks by gating the entire
         # job on the secret's presence. Empty/absent secret = fork = no-op.
         if: env.HOMEBREW_TAP_GITHUB_TOKEN != ''
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v6.4.0
         with:
           version: "~> v2"
           args: release --clean
@@ -148,13 +148,13 @@ jobs:
           echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.4.0
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
 
       - name: Compute backend image labels
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v5.10.0
         with:
           images: ghcr.io/${{ github.repository_owner }}/multica-backend
           labels: |
@@ -162,10 +162,10 @@ jobs:
             org.opencontainers.image.description=Multica self-hosted backend
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v3.12.0
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -173,7 +173,7 @@ jobs:
 
       - name: Build and push by digest
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v6.19.2
         with:
           context: .
           file: Dockerfile
@@ -194,7 +194,7 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: digests-backend-${{ env.PLATFORM_PAIR }}
           path: /tmp/digests/*
@@ -209,18 +209,18 @@ jobs:
       cancel-in-progress: true
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.3.0
         with:
           path: /tmp/digests
           pattern: digests-backend-*
           merge-multiple: true
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v3.12.0
 
       - name: Compute backend image tags
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v5.10.0
         with:
           images: ghcr.io/${{ github.repository_owner }}/multica-backend
           flavor: |
@@ -231,7 +231,7 @@ jobs:
             type=sha,prefix=sha-
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -267,13 +267,13 @@ jobs:
           echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.4.0
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
 
       - name: Compute web image labels
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v5.10.0
         with:
           images: ghcr.io/${{ github.repository_owner }}/multica-web
           labels: |
@@ -281,10 +281,10 @@ jobs:
             org.opencontainers.image.description=Multica self-hosted web frontend
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v3.12.0
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -292,7 +292,7 @@ jobs:
 
       - name: Build and push by digest
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v6.19.2
         with:
           context: .
           file: Dockerfile.web
@@ -312,7 +312,7 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: digests-web-${{ env.PLATFORM_PAIR }}
           path: /tmp/digests/*
@@ -327,18 +327,18 @@ jobs:
       cancel-in-progress: true
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.3.0
         with:
           path: /tmp/digests
           pattern: digests-web-*
           merge-multiple: true
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v3.12.0
 
       - name: Compute web image tags
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v5.10.0
         with:
           images: ghcr.io/${{ github.repository_owner }}/multica-web
           flavor: |
@@ -349,7 +349,7 @@ jobs:
             type=sha,prefix=sha-
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -381,10 +381,10 @@ jobs:
       OCI_REGISTRY: oci://ghcr.io/${{ github.repository_owner }}/charts
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.4.0
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v4.3.1
 
       - name: Sync chart metadata with release tag
         env:
@@ -428,7 +428,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.4.0
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
@@ -438,7 +438,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y rpm
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v5.6.0
         with:
           # Keep the security floor even when the setup-go manifest lags;
           # continue accepting newer patches within Go 1.27.
@@ -450,10 +450,10 @@ jobs:
         run: go version
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v4.3.0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v4.4.0
         with:
           node-version: 22
           cache: pnpm

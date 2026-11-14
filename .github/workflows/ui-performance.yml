@@ -43,15 +43,15 @@ jobs:
     # leaves room for build variance and still stops a run that has hung.
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.4.0
         with:
           # Both refs must be reachable: the script builds each one in its own
           # worktree, and a shallow clone cannot produce them.
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4.3.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -76,7 +76,7 @@ jobs:
 
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: ui-performance-report
           path: perf-report/
