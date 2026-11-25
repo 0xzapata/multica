@@ -191,8 +191,8 @@ export function useSettingsSearchIndex(
       {
         tab: "notifications",
         anchor: "auto_archive_completed",
-        title: t(($) => $.notifications.leaving.done_label),
-        description: t(($) => $.notifications.leaving.done_description),
+        title: t(($) => $.notifications.leaving.auto_label),
+        description: t(($) => $.notifications.leaving.auto_description),
       },
       {
         tab: "notifications",
@@ -290,11 +290,6 @@ export function useSettingsSearchIndex(
         anchor: "voice-history",
         title: t(($) => $.voice_input.history.title),
         description: t(($) => $.voice_input.history.description),
-      },
-      {
-        tab: "apps",
-        title: t(($) => $.page.tabs.apps),
-        description: t(($) => $.connected_apps.description),
       },
       // Workspace
       { tab: "workspace", anchor: "name", title: t(($) => $.workspace.name_label) },

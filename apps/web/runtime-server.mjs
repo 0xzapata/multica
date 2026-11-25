@@ -86,12 +86,13 @@ function isBackendPath(rawUrl = "/") {
     pathname.startsWith("/auth/") ||
     pathname === "/uploads" ||
     pathname.startsWith("/uploads/") ||
-    pathname === "/ws"
+    isWebSocketPath(rawUrl)
   );
 }
 
 function isWebSocketPath(rawUrl = "/") {
-  return new URL(rawUrl, "http://localhost").pathname === "/ws";
+  const pathname = new URL(rawUrl, "http://localhost").pathname;
+  return pathname === "/ws" || pathname === "/collab";
 }
 
 function proxyHttp(req, res, targetBaseUrl) {
